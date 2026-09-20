@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+.DS_Store
+
+# raw run outputs (npz/csv/png) -- figures/ is tracked separately and curated.
+# NOTE: this must be `results/*`, not `results/` -- git cannot re-include
+# files inside an already-excluded parent directory, so a bare `results/`
+# rule would silently defeat the `!results/baselines/**` exception below.
+results/*
+# exception: the frozen, validated baseline reference results are tracked
+!results/baselines/
+!results/baselines/**

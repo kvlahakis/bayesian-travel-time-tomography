@@ -1,0 +1,29 @@
+# Experiment II: Bayesian calibration under the correctly specified model.
+#
+# s_true ~ N(s0, Cs) is drawn from the same prior the inversion assumes, and
+# inference uses exactly the same Cs and Sigma_d (ell_true == ell_infer,
+# sigma_true == sigma_infer). Under this generative model, Q ~ chi2(n_cells)
+# and z ~ N(0, 1) are *guaranteed* by construction -- this run validates the
+# implementation, not a deeper statistical claim (see ARCHITECTURE.md).
+
+grid:
+  W: 10.0
+  n: 20
+
+acquisition:
+  Ns: 12
+  Nr: 12
+
+noise:
+  sigma_true: 0.02
+  sigma_infer: 0.02
+
+prior:
+  tau2: 0.04
+  ell_true: 2.0
+  ell_infer: 2.0
+  s_bg: 1.0
+  jitter_relative: 1.0e-6
+
+n_repeats: 1000
+seed: 12345

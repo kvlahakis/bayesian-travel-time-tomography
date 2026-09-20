@@ -1,0 +1,28 @@
+# Experiment I: construction and validation.
+#
+# A single deterministic run of the full pipeline (geometry -> forward ->
+# prior -> inversion), producing the three-panel truth/posterior-mean/
+# posterior-std plot. Not a misspecification experiment: sigma_true ==
+# sigma_infer and ell_true == ell_infer here by design.
+
+grid:
+  W: 10.0
+  n: 20
+
+acquisition:
+  Ns: 12
+  Nr: 12
+
+noise:
+  sigma_true: 0.02
+  sigma_infer: 0.02
+
+prior:
+  tau2: 0.04
+  ell_true: 2.0
+  ell_infer: 2.0
+  s_bg: 1.0
+  jitter_relative: 1.0e-6
+
+n_repeats: 1
+seed: 0
