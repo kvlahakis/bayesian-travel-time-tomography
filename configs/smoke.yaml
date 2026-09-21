@@ -1,0 +1,35 @@
+# Smoke-test configuration: NOT a calibration baseline.
+#
+# A deliberately tiny grid/geometry/repeat-count, used only to exercise the
+# full pipeline (geometry -> forward matrix -> synthetic data -> prior ->
+# inversion -> diagnostics) quickly, e.g. after an environment change or a
+# refactor. Do not use this config for any scientific claim, and do not
+# confuse it with configs/baseline.yaml, configs/calibration_correct.yaml, or
+# configs/calibration_fixed_truth.yaml, whose parameters are frozen and
+# validated. Outputs from this config must never be written under
+# results/baselines/.
+
+grid:
+  W: 6.0
+  n: 6
+
+acquisition:
+  Ns: 4
+  Nr: 4
+
+noise:
+  sigma_true: 0.05
+  sigma_infer: 0.05
+
+prior:
+  tau2: 0.05
+  ell_true: 1.5
+  ell_infer: 1.5
+  s_bg: 1.0
+  jitter_relative: 1.0e-6
+
+fixed_truth:
+  checkerboard_block_size: 2
+
+n_repeats: 3
+seed: 0

@@ -6,7 +6,7 @@ Mahalanobis statistic, and marginal credible-interval coverage (for a single
 realization, and aggregated across repeated realizations).
 
 Note on "calibrated": whether these diagnostics behave as their nominal
-theory predicts (``Q ~ chi2(n)``, ``z ~ N(0, 1)``, empirical coverage close to
+theory predicts (``Q ~ chi2(n_cells)``, ``z ~ N(0, 1)``, empirical coverage close to
 nominal) depends entirely on *how the truth used to compute them was
 generated* -- see `ARCHITECTURE.md` for the distinction between the
 correctly-specified generative model (Experiment II) and a fixed physical
@@ -95,3 +95,48 @@ def _covered_fraction(
     s_true: np.ndarray, s_post: np.ndarray, post_std: np.ndarray, alpha: float
 ) -> float:
     return float(np.mean(_covered_fraction_mask(s_true, s_post, post_std, alpha)))
+
+
+def fixed_truth_expected_Q(
+    A: np.ndarray,
+    C_post: np.ndarray,
+    sigma_infer2: float,
+    sigma_true2: float,
+    s_true: np.ndarray,
+    s0: np.ndarray,
+) -> dict:
+    """Theoretical E[Q] for Experiment III's fixed-truth setting (see
+    `ARCHITECTURE.md`'s "Experiment III: investigating the boundary/interior
+    coverage reversal" section for the derivation):
+
+        E[Q] = tr(C_post^-1 V_post) + b^T C_post^-1 b,
+
+    where `K = C_post A^T / sigma_infer2` (the Kalman-gain identity `K =
+    Cs_infer A^T (A Cs_infer A^T + Sigma_d_infer)^-1 = C_post A^T
+    Sigma_d_infer^-1`, using the cheaper right-hand form), `b = (I - KA)(s_true
+    - s0)` is the deterministic fixed-truth bias, and `V_post = sigma_true2 *
+    K K^T` is the repeated-noise sampling covariance of `s_post` (using the
+    *true* noise covariance `sigma_true2 * I`, since that governs the actual
+    realized noise -- `K` itself is built from the *inference* noise model
+    `sigma_infer2 * I`, matching how `C_post` was computed).
+
+    `C_post`, `sigma_infer2` must be the same ones used to compute the
+    fixed-truth posterior (e.g. via `inversion.posterior_isotropic`); this
+    function performs no inversion of its own beyond Cholesky solves against
+    `C_post`.
+
+    Returns a dict with keys ``"trace"`` (the noise-driven term,
+    ``tr(C_post^-1 V_post)``, identical for any `s_true` sharing this `A`/
+    `C_post`/noise), ``"bias"`` (`b^T C_post^-1 b`, the only term depending on
+    `s_true`), and ``"theory"`` (their sum, the theoretical `E[Q]`).
+    """
+    n_cells = A.shape[1]
+    K = (C_post @ A.T) / sigma_infer2
+    b = (np.eye(n_cells) - K @ A) @ (s_true - s0)
+    V_post = sigma_true2 * (K @ K.T)
+
+    C_post_factor = cho_factor(C_post, lower=True)
+    trace_term = float(np.trace(cho_solve(C_post_factor, V_post)))
+    bias_term = float(b @ cho_solve(C_post_factor, b))
+
+    return {"trace": trace_term, "bias": bias_term, "theory": trace_term + bias_term}

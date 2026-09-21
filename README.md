@@ -7,34 +7,75 @@ straight-ray line integrals, and the resulting linear-Gaussian posterior is
 computed in closed form (no MCMC, no iterative optimization).
 
 The full scientific specification — problem statement, prior/likelihood model,
-and the five experiments (construction/validation, correctly-specified Bayesian
-calibration, fixed-truth coverage, prior misspecification, noise
-misspecification, acquisition-geometry sensitivity) — is in `experiment.pdf`.
+and the three experiments (construction/validation, correctly-specified
+Bayesian calibration, and fixed-truth coverage under a well-matched and a
+mismatched truth) — is in `experiment.pdf`.
 
-See `ARCHITECTURE.md` for the module dependency structure, the key
-distinction between the two senses of "calibrated" used throughout this
-project, and why Experiment III's per-cell `z`/KS diagnostics are not
-expected to look like Experiment II's even for a well-matched fixed truth
-(coverage and `Q` are the diagnostics that actually answer Experiment III's
-question).
+**Headline result:** under the correctly specified generative model
+(Experiment II), the posterior is exactly calibrated — `Q ~ chi2(n_cells)`, confirmed
+empirically. Under a fixed physical truth (Experiment III), that guarantee no
+longer holds: a smooth truth well matched to the prior's assumed smoothness
+remains well calibrated (in fact conservatively over-covers), while a sharp,
+prior-mismatched truth produces severe undercoverage — despite an identically
+well-defined posterior in both cases. This distinction, between a posterior
+being mathematically well defined and a posterior being a trustworthy
+description of physical uncertainty, is the project's central finding.
+
+## Model
+
+Domain `Omega = [0, W]^2`, sources on `x=0`, receivers on `x=W`, straight rays
+connecting every source to every receiver. Slowness `s = 1/v` is discretized
+on an `n x n` grid (`p = n**2` unknown cells), giving the linear forward model
+`t = A s`, with `A_ij` the exact length of ray `i` through cell `j`. Synthetic
+data are `d = A s_true + epsilon`, `epsilon ~ N(0, Sigma_d)` (`Sigma_d =
+sigma^2 I` throughout this project). The prior is `s ~ N(s0, Cs)`, with
+constant background mean and a squared-exponential covariance. The exact
+Gaussian posterior,
+
+```
+C_post = (A^T Sigma_d^-1 A + Cs^-1)^-1
+s_post = C_post (A^T Sigma_d^-1 d + Cs^-1 s0)
+```
+
+is computed via Cholesky factorizations and triangular solves throughout —
+never an explicit matrix inverse (see `inversion.py`).
+
+See `experiment.pdf` for the full mathematical derivation, `ARCHITECTURE.md`
+for the module dependency structure and implementation-level diagnostics
+(including why Experiment III's per-cell `z`/KS diagnostics don't resemble
+Experiment II's even for a well-matched truth, and the follow-up investigation
+into a boundary/interior coverage effect observed in Experiment III), and
+`CLAUDE.md` for the module contracts and conventions used throughout the
+implementation.
 
 ## Status
 
-Under active development, following the build order in `CLAUDE.md`.
-Implemented so far: `geometry.py`, `forward.py`, `prior.py`, `inversion.py`,
-`diagnostics.py`, `config.py`; Experiment I (construction/validation) end-to-end
-via `scripts/run_experiment.py configs/baseline.yaml --plot`; Experiment II
-(correctly specified Bayesian calibration) via
-`scripts/run_experiment.py configs/calibration_correct.yaml --experiment correctly_specified`;
-and Experiment III (fixed truth, smooth and sharp) via
-`scripts/run_experiment.py configs/calibration_fixed_truth.yaml --experiment fixed_truth_smooth`
-(or `fixed_truth_sharp`).
+Complete. The project implements and validates Experiment I
+(construction/validation), Experiment II (correctly specified Bayesian
+calibration), and Experiment III (fixed-truth coverage, both a smooth and a
+sharp truth), plus a follow-up diagnostic investigation into an observed
+coverage effect in Experiment III (see `ARCHITECTURE.md`). The package
+(`geometry.py`, `forward.py`, `prior.py`, `inversion.py`, `diagnostics.py`,
+`experiments.py`, `plots.py`, `config.py`) and its test suite are fully
+implemented.
 
-![Experiment I: construction and validation](figures/experiment_I_construction_validation.png)
+Reproduce each experiment with:
+
+```bash
+# Experiment I: construction and validation
+scripts/run_experiment.py configs/baseline.yaml --plot
+
+# Experiment II: correctly specified Bayesian calibration
+scripts/run_experiment.py configs/calibration_correct.yaml --experiment correctly_specified
+
+# Experiment III: fixed-truth coverage (smooth or sharp)
+scripts/run_experiment.py configs/calibration_fixed_truth.yaml --experiment fixed_truth_smooth
+scripts/run_experiment.py configs/calibration_fixed_truth.yaml --experiment fixed_truth_sharp
+```
 
 The `n=20`, `N=1000`, `seed=12345` run under `results/baselines/` (files
 `experiment_II_baseline_n20_N1000_seed12345.{npz,yaml}`) is the validated,
-frozen reference result for Experiment II — it should not be overwritten by a
+frozen reference result for Experiment II. It should not be overwritten by a
 run with a different seed or configuration without also updating this note.
 
 Likewise, `experiment_III_baseline_smooth_n20_N1000_seed12345.npz` and
@@ -42,13 +83,57 @@ Likewise, `experiment_III_baseline_smooth_n20_N1000_seed12345.npz` and
 `results/baselines/` (sharing config
 `experiment_III_baseline_config_n20_N1000_seed12345.yaml`, identical to
 `configs/calibration_fixed_truth.yaml`) are the validated, frozen reference
-results for Experiment III's smooth-vs-sharp fixed-truth comparison — they
+results for Experiment III's smooth-vs-sharp fixed-truth comparison. They
 should not be overwritten by a run with a different seed, truth, or
 configuration without also updating this note.
+
+## Scope
+
+This project is deliberately limited to a finite-dimensional, closed-form
+linear-Gaussian model. It does not include a systematic acquisition-geometry
+sweep, a controlled prior-misspecification experiment, or a controlled
+noise-misspecification experiment: the fixed-truth comparison in Experiment
+III already demonstrates the central phenomenon those experiments would also
+illustrate — a well-defined posterior failing to describe physical uncertainty
+under model mismatch — via a mismatched truth rather than a mismatched prior
+or noise model. See `experiment.pdf`'s "Scope and interpretation" section for
+the complete list of excluded effects (curved rays, attenuation, wave-equation
+simulation, and others).
+
+## Figures
+
+Curated final figures live under `figures/` (tracked; regenerate with
+`scripts/make_figures.py`, which reads `configs/baseline.yaml` and the frozen
+`results/baselines/` outputs and never regenerates those baselines):
+
+1. `figure_1_geometry.png` — domain, sources, receivers, a sample of rays.
+2. `figure_2_ray_coverage.png` — per-cell total ray-intersection length.
+3. `figure_3_experiment_I_reconstruction.png` — true field / posterior mean /
+   posterior std / reconstruction error.
+4. `figure_4_experiment_II_calibration.png` — `Q` vs. `chi2(n_cells)`, and
+   coverage vs. nominal.
+5. `figure_5_experiment_III_fixed_truth.png` — smooth vs. sharp truth and
+   posterior mean.
+6. `figure_6_fixed_truth_Q_decomposition.png` — the `E[Q] = tr(C_post^-1
+   V_post) + b^T C_post^-1 b` decomposition, smooth vs. sharp.
+7. `figure_7_boundary_interior_coverage.png` — the sharp-truth
+   boundary/interior coverage comparison from `ARCHITECTURE.md`'s
+   investigation (shown as-is, not re-derived).
 
 ## Development
 
 ```bash
 pip install -e ".[dev]"
-pytest
+pytest                                            # full test suite
+
+# smoke test: exercises the full pipeline on a tiny config, not a
+# calibration claim (does not write to results/baselines/)
+scripts/run_experiment.py configs/smoke.yaml --experiment construction_validation --results-dir results/smoke
+
+# modest scaling benchmark (forward-matrix construction, posterior solve)
+# at a few grid sizes; writes to results/benchmarks/, not results/baselines/
+scripts/benchmark_scaling.py
+
+# regenerate figures/ from configs/baseline.yaml and the frozen baselines
+scripts/make_figures.py
 ```

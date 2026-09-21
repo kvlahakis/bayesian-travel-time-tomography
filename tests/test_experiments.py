@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from tomography.config import (
     AcquisitionConfig,
@@ -7,10 +8,17 @@ from tomography.config import (
     GridConfig,
     NoiseConfig,
     PriorConfig,
+    load_config,
 )
-from tomography.experiments import run_construction_validation, run_fixed_truth
-from tomography.forward import synthetic_truth_checkerboard, synthetic_truth_gaussian_anomaly
+from tomography.diagnostics import fixed_truth_expected_Q
+from tomography.experiments import (
+    _build_geometry_and_inference_prior,
+    run_construction_validation,
+    run_fixed_truth,
+)
+from tomography.forward import forward, synthetic_truth_checkerboard, synthetic_truth_gaussian_anomaly
 from tomography.geometry import make_grid
+from tomography.inversion import posterior_isotropic
 
 
 def _baseline_config() -> ExperimentConfig:
@@ -174,3 +182,61 @@ def test_run_fixed_truth_smooth_vs_sharp_central_calibration_comparison():
     n_cells = config.grid.n**2
     assert np.mean(smooth.mahalanobis) < n_cells
     assert np.mean(sharp.mahalanobis) > 100 * n_cells
+
+
+def test_fixed_truth_expected_Q_matches_frozen_baseline_within_monte_carlo_tolerance():
+    """Regression check tying `diagnostics.fixed_truth_expected_Q` to the
+    frozen Experiment III baselines' documented numbers (see
+    `ARCHITECTURE.md`'s "Experiment III: investigating the boundary/interior
+    coverage reversal" section): trace term ~32.928 (shared by both truths),
+    bias term ~0.282 (smooth) / ~21,954,034.70 (sharp), matching the frozen
+    `.npz` baselines' empirical mean Q to well within Monte Carlo tolerance
+    for N=1000 realizations. This does not regenerate or alter the frozen
+    baselines -- it only reads their config and `.npz` outputs.
+    """
+    config = load_config("configs/calibration_fixed_truth.yaml")
+    n_cells = config.grid.n**2
+    _, A, Cs_infer, s0 = _build_geometry_and_inference_prior(config)
+
+    dummy_d = forward(A, s0)
+    _, C_post = posterior_isotropic(
+        A, dummy_d, sigma2=config.noise.sigma_infer**2, Cs=Cs_infer, s0=s0
+    )
+
+    grid = make_grid(config.grid.W, config.grid.n)
+    smooth_truth = synthetic_truth_gaussian_anomaly(
+        grid, s_bg=config.prior.s_bg, delta_s=np.sqrt(config.prior.tau2),
+        x0=config.grid.W / 2, y0=config.grid.W / 2, r=config.grid.W / 6,
+    )
+    sharp_truth = synthetic_truth_checkerboard(
+        grid, s_bg=config.prior.s_bg, delta_s=np.sqrt(config.prior.tau2),
+        block_size=config.fixed_truth.checkerboard_block_size,
+    )
+
+    smooth_npz = np.load("results/baselines/experiment_III_baseline_smooth_n20_N1000_seed12345.npz")
+    sharp_npz = np.load("results/baselines/experiment_III_baseline_sharp_n20_N1000_seed12345.npz")
+    assert np.array_equal(smooth_npz["truths"][0], smooth_truth)
+    assert np.array_equal(sharp_npz["truths"][0], sharp_truth)
+
+    # Full-precision anchors from the original derivation of these numbers
+    # (ARCHITECTURE.md's table rounds trace to 32.928 and the smooth bias to
+    # 0.282, matching these to 3 significant figures).
+    for name, s_true, npz, expected_trace, expected_bias in [
+        ("smooth", smooth_truth, smooth_npz, 32.927974, 0.281715),
+        ("sharp", sharp_truth, sharp_npz, 32.927974, 21954034.698336),
+    ]:
+        result = fixed_truth_expected_Q(
+            A, C_post,
+            sigma_infer2=config.noise.sigma_infer**2,
+            sigma_true2=config.noise.sigma_true**2,
+            s_true=s_true, s0=s0,
+        )
+        assert result["trace"] == pytest.approx(expected_trace, rel=1e-5)
+        assert result["bias"] == pytest.approx(expected_bias, rel=1e-5)
+
+        empirical_mean_Q = float(np.mean(npz["mahalanobis"]))
+        rel_discrepancy = abs(result["theory"] - empirical_mean_Q) / empirical_mean_Q
+        assert rel_discrepancy < 0.01, (
+            f"{name}: theoretical E[Q]={result['theory']:.6f} vs empirical "
+            f"mean Q={empirical_mean_Q:.6f} (rel. discrepancy {rel_discrepancy:.2%})"
+        )

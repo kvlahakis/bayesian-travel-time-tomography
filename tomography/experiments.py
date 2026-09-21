@@ -1,4 +1,4 @@
-"""Single-run and repeated-run experiment harnesses for Experiments I-V.
+"""Single-run and repeated-run experiment harnesses for Experiments I-III.
 
 Experiment I (construction/validation) is implemented here as
 `run_construction_validation`. It predates `diagnostics.py` and any
@@ -12,23 +12,24 @@ harnesses, since Experiment II needs nothing beyond `config` itself to define
 its truth-generation rule) and `run_correctly_specified` (the named entry
 point, which additionally checks that `config` really is correctly
 specified). See `ARCHITECTURE.md` for what "correctly specified" means and
-why `Q ~ chi2(n)` here validates the implementation rather than a deeper
-statistical claim.
+why `Q ~ chi2(n_cells)` here validates the implementation rather than a
+deeper statistical claim.
 
 Experiment III (`run_fixed_truth`) holds a deterministic, externally supplied
 `s_true` fixed and repeats only the noise draw. Unlike Experiment II, nothing
 about this truth is drawn from `Cs_infer`, so there is no guarantee that
-`Q ~ chi2(n)` here (see `ARCHITECTURE.md`); whether the posterior stays
+`Q ~ chi2(n_cells)` here (see `ARCHITECTURE.md`); whether the posterior stays
 calibrated depends entirely on how well `s_true` matches what `Cs_infer`
 expects. `run_repeated` and `run_fixed_truth` differ only in what varies
 across realizations (truth and noise, vs. noise alone), so they share a
 common per-realization-diagnostics-and-stacking helper,
 `_run_repeated_from_draws`.
 
-Experiments IV and V (prior misspecification, noise misspecification) each
-need extra truth/inference-generation logic beyond what these two share, so
-they will get their own functions rather than reusing `_run_repeated_from_draws`
-directly.
+This is the complete set of experiments for this project (see `CLAUDE.md`'s
+"Out of scope" section): a systematic acquisition-geometry sweep, a
+controlled prior-misspecification experiment, and a controlled
+noise-misspecification experiment are deliberately not part of this project,
+not future work to be added here.
 """
 
 from __future__ import annotations
@@ -167,12 +168,13 @@ class ExperimentResults:
 
 def _check_correctly_specified(config: ExperimentConfig) -> None:
     """Guard the "correctly specified" invariant that Experiment II's
-    calibration guarantee (`Q ~ chi2(n)`) depends on: the *same* Cs and
+    calibration guarantee (`Q ~ chi2(n_cells)`) depends on: the *same* Cs and
     sigma must be used to generate the truth and to perform inference. A
     config with `ell_true != ell_infer` or `sigma_true != sigma_infer` is a
-    deliberate misspecification (Experiments IV/V), not this experiment, so
-    it is rejected here rather than silently invalidating the calibration
-    claim.
+    deliberate misspecification, which this project does not implement as a
+    controlled experiment (see `CLAUDE.md`'s "Out of scope" section) but which
+    this guard rejects here regardless, rather than silently invalidating the
+    calibration claim.
     """
     if config.prior.ell_true != config.prior.ell_infer:
         raise ValueError(
@@ -283,10 +285,8 @@ def _run_correctly_specified_realization(
 
     Draws `s_true ~ N(s0, Cs_infer)` -- under the correctly specified model
     the truth-generating and inference covariances are, by definition, the
-    same object, so `Cs_infer` legitimately plays both roles here (unlike
-    Experiment IV, where they are built as two explicitly separate
-    objects). Generates one noisy data set and computes the posterior and
-    its diagnostics.
+    same object, so `Cs_infer` legitimately plays both roles here. Generates
+    one noisy data set and computes the posterior and its diagnostics.
     """
     s_true = sample_prior(s0, Cs_infer, rng)
     t_true = forward(A, s_true)
