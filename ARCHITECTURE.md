@@ -3,21 +3,25 @@
 ## Dependency chain
 
 ```
-geometry
-   |
-forward
-   |
-prior ----+
-   |      |
-inversion <
-   |
-diagnostics
-   |
-experiments
-   |
-plots
-   |
-scripts / notebook
+             geometry
+            /        \
+           v          v
+       forward       prior
+            \        /
+             v      v
+            inversion
+                |
+                v
+           diagnostics
+                |
+                v
+            experiments
+                |
+                v
+              plots
+                |
+                v
+     scripts / notebook
 ```
 
 - `geometry.py` has no dependencies on other project modules. It defines the
@@ -32,10 +36,9 @@ scripts / notebook
 - `diagnostics.py` depends on `inversion.py`'s outputs (`s_post`, `C_post`) and
   a ground truth from `forward.py`.
 - `experiments.py` wires `geometry`, `forward`, `prior`, `inversion`, and
-  `diagnostics` together into the five experiment families, using
-  `config.py` for reproducible parameterization.
-- `plots.py` consumes `experiments.py` outputs (and raw `geometry`/`inversion`
-  quantities for the singular-value / eigenvalue spectra) and produces figures.
+  `diagnostics` together into Experiments I-III, using `config.py` for
+  reproducible parameterization.
+- `plots.py` consumes `experiments.py` outputs and produces figures.
 - `scripts/run_experiment.py` and `notebooks/report.ipynb` are thin consumers
   at the top of the chain: YAML config in, `experiments.py` + `plots.py` out.
   No mathematical logic lives above `experiments.py`.
@@ -53,11 +56,11 @@ never deviated from elsewhere.
 > Experiment II generates the truth from the same prior the inversion assumes
 > (`s_true ~ N(s0, Cs)`, `d | s_true ~ N(A s_true, Sigma_d)`). Under this
 > generative model, the posterior is exactly the correct conditional
-> distribution, so `Q ~ chi2(n)` is *guaranteed* by the model being
+> distribution, so `Q ~ chi2(n_cells)` is *guaranteed* by the model being
 > self-consistent — this experiment validates the implementation, not a deeper
 > statistical claim. Experiment III fixes `s_true` as a deterministic field not
 > regarded as a draw from the prior. There is *no general guarantee* that
-> `Q ~ chi2(n)` here; whether the posterior remains well-calibrated depends on
+> `Q ~ chi2(n_cells)` here; whether the posterior remains well-calibrated depends on
 > how well the fixed truth matches what the prior expects. Never write "the
 > posterior is calibrated" without specifying which of these two senses is
 > meant.
@@ -70,18 +73,18 @@ between nearby cells, and this dependence is then modified (not simply
 inherited) by the likelihood/posterior update that produces `C_post` — the
 posterior's correlation structure is not assumed to equal the prior's. A
 diagnostic that pools `z` values across cells (e.g. a
-goodness-of-fit test against `N(0, 1)`) therefore cannot treat those pooled
-values as independent observations: doing so was tried during development
-(a Kolmogorov-Smirnov test of `z`, pooled across all cells and realizations,
-against `N(0, 1)`) and it failed reliably at the project's real grid scale
-even though the underlying model and inference code were correct — the small
-p-value reflected the violated independence assumption, not miscalibration.
-That pooled-across-cells test has been removed from `test_calibration.py`.
+goodness-of-fit test against `N(0, 1)`) cannot treat those pooled values as
+independent observations, and is not used in this project's tests for that
+reason. (A pooled Kolmogorov-Smirnov test of this kind was tried during
+development and removed from `test_calibration.py` after confirming that it
+failed reliably at the project's real grid scale even though the underlying
+model and inference code were correct — the small p-value reflected the
+violated independence assumption, not miscalibration.)
 
 Per-realization statistics such as `Q` do not have this problem: each
 realization's `Q` is computed from one independent draw of `s_true` and
 `epsilon`, so pooling `Q` *across realizations* is valid, and
-`test_calibration.py`'s `Q`-vs-`chi2(n)` check relies on exactly that.
+`test_calibration.py`'s `Q`-vs-`chi2(n_cells)` check relies on exactly that.
 Where per-cell behavior needs checking, `test_calibration.py` instead runs
 separate KS tests against `N(0, 1)` for a small number of individual,
 deterministically chosen cells (each test pooling only across realizations
@@ -161,9 +164,10 @@ fixed truth — not 1. Concretely:
     within-cell sampling variance — do not describe it as "wider" without
     this distinction.
 
-**Neither behavior is an Experiment-II-style calibration failure** — it is
-the expected consequence of removing the prior-variability contribution to
-the variance decomposition by fixing `s_true`. Note also that the *pooled*
+**Neither behavior should be interpreted using the Experiment-II `chi2(n_cells)`
+calibration benchmark**: fixing `s_true` changes the repeated-noise sampling
+distribution, removing the prior's contribution to the variance decomposition that
+the Experiment-II guarantee relies on. Note also that the *pooled*
 `std(z)` reported elsewhere for a fixed truth (pooling across cells, not
 just realizations) is not directly comparable to `r_j`: by the law of total
 variance, `Var(pooled z) = mean_j(Var(z_j)) + Var_j(mean(z_j))`, and the
@@ -294,3 +298,12 @@ closed-form posterior. The following are excluded by design, not by oversight:
 iterative optimization, MCMC, neural networks or neural-operator surrogates,
 curved-ray or nonlinear eikonal solvers, and external tomography frameworks
 (e.g. SimPEG).
+
+The project's scope is also limited to Experiments I-III: a systematic
+acquisition-geometry sweep, a controlled prior-misspecification experiment,
+and a controlled noise-misspecification experiment are not part of this
+project. The fixed-truth comparison in Experiment III (see above) already
+demonstrates the central phenomenon those experiments would also
+illustrate — a well-defined posterior failing to describe physical
+uncertainty under model mismatch — via a mismatched truth rather than a
+mismatched prior or noise model.
