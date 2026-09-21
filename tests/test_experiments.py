@@ -3,6 +3,7 @@ import numpy as np
 from tomography.config import (
     AcquisitionConfig,
     ExperimentConfig,
+    FixedTruthConfig,
     GridConfig,
     NoiseConfig,
     PriorConfig,
@@ -20,6 +21,10 @@ def _baseline_config() -> ExperimentConfig:
         prior=PriorConfig(tau2=0.04, ell_true=2.0, ell_infer=2.0, s_bg=1.0),
         n_repeats=1,
         seed=0,
+        # checkerboard_block_size=4 matches configs/calibration_fixed_truth.yaml
+        # -- see that file's comment for why 4 (not 2) is required for a
+        # boundary-vs-interior comparison to be possible at all.
+        fixed_truth=FixedTruthConfig(checkerboard_block_size=4),
     )
 
 
@@ -63,14 +68,6 @@ def test_run_construction_validation_is_reproducible():
     np.testing.assert_array_equal(result_a.s_post, result_b.s_post)
 
 
-# block_size=4 (not 2): with block_size=2 on a 20x20 grid, *every* cell sits
-# on a block edge (its 4-neighbors always cross into a different block), so
-# there is no "interior" region to contrast against block boundaries at all.
-# block_size=4 gives 100/400 genuine interior cells (25%) alongside boundary
-# cells, which is what a boundary-vs-interior coverage comparison needs.
-SHARP_TRUTH_BLOCK_SIZE = 4
-
-
 def _smooth_truth(config: ExperimentConfig) -> np.ndarray:
     # Matches run_construction_validation's (Experiment I's) own default
     # exactly -- delta_s is *derived* from the prior's marginal variance,
@@ -88,12 +85,13 @@ def _smooth_truth(config: ExperimentConfig) -> np.ndarray:
 
 
 def _sharp_truth(config: ExperimentConfig) -> np.ndarray:
+    assert config.fixed_truth is not None, "config must set fixed_truth.checkerboard_block_size"
     grid = make_grid(config.grid.W, config.grid.n)
     return synthetic_truth_checkerboard(
         grid,
         s_bg=config.prior.s_bg,
         delta_s=np.sqrt(config.prior.tau2),
-        block_size=SHARP_TRUTH_BLOCK_SIZE,
+        block_size=config.fixed_truth.checkerboard_block_size,
     )
 
 

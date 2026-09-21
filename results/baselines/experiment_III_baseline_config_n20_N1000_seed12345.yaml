@@ -30,5 +30,15 @@ prior:
   s_bg: 1.0
   jitter_relative: 1.0e-6
 
+# Only used by `--experiment fixed_truth_sharp` (the checkerboard truth).
+# checkerboard_block_size=4 was chosen deliberately for the 20x20 grid so
+# that the boundary-vs-interior comparison contains a nonempty interior
+# region. block_size=2 would leave no interior cells under the current
+# boundary definition (every cell would touch a block edge). This is an
+# explicit experiment-design decision, not an incidental implementation
+# detail.
+fixed_truth:
+  checkerboard_block_size: 4
+
 n_repeats: 1000
 seed: 12345

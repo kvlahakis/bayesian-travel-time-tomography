@@ -41,6 +41,19 @@ class PriorConfig:
 
 
 @dataclass
+class FixedTruthConfig:
+    """Parameters specific to Experiment III's sharp/checkerboard truth.
+
+    `checkerboard_block_size` has no default: it materially changes the
+    truth field (and hence every downstream diagnostic), so a config that
+    runs the checkerboard variant must state it explicitly rather than
+    silently inherit a code-level constant.
+    """
+
+    checkerboard_block_size: int
+
+
+@dataclass
 class ExperimentConfig:
     grid: GridConfig
     acquisition: AcquisitionConfig
@@ -48,6 +61,9 @@ class ExperimentConfig:
     prior: PriorConfig
     n_repeats: int
     seed: int
+    # Only Experiment III's checkerboard truth needs this; every other
+    # experiment (I, II, and III's smooth truth) leaves it unset.
+    fixed_truth: FixedTruthConfig | None = None
 
 
 def load_config(path: str) -> ExperimentConfig:
@@ -62,4 +78,5 @@ def load_config(path: str) -> ExperimentConfig:
         prior=PriorConfig(**raw["prior"]),
         n_repeats=raw["n_repeats"],
         seed=raw["seed"],
+        fixed_truth=FixedTruthConfig(**raw["fixed_truth"]) if "fixed_truth" in raw else None,
     )

@@ -11,9 +11,12 @@ and the five experiments (construction/validation, correctly-specified Bayesian
 calibration, fixed-truth coverage, prior misspecification, noise
 misspecification, acquisition-geometry sensitivity) — is in `experiment.pdf`.
 
-See `ARCHITECTURE.md` for the module dependency structure and the key
+See `ARCHITECTURE.md` for the module dependency structure, the key
 distinction between the two senses of "calibrated" used throughout this
-project.
+project, and why Experiment III's per-cell `z`/KS diagnostics are not
+expected to look like Experiment II's even for a well-matched fixed truth
+(coverage and `Q` are the diagnostics that actually answer Experiment III's
+question).
 
 ## Status
 

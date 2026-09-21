@@ -22,14 +22,6 @@ from tomography.geometry import make_grid
 from tomography.plots import plot_field_triplet
 
 
-# block_size=4 (not 2): with block_size=2 on a 20x20 grid, *every* cell sits
-# on a block edge (its 4-neighbors always cross into a different block), so
-# there is no "interior" region to contrast against block boundaries at all.
-# block_size=4 gives 100/400 genuine interior cells (25%) alongside boundary
-# cells, which is what a boundary-vs-interior coverage comparison needs.
-SHARP_TRUTH_BLOCK_SIZE = 4
-
-
 def _smooth_fixed_truth(config: ExperimentConfig) -> np.ndarray:
     # Matches run_construction_validation's (Experiment I's) own default
     # exactly -- delta_s is *derived* from the prior's marginal variance,
@@ -47,12 +39,18 @@ def _smooth_fixed_truth(config: ExperimentConfig) -> np.ndarray:
 
 
 def _sharp_fixed_truth(config: ExperimentConfig) -> np.ndarray:
+    if config.fixed_truth is None:
+        raise ValueError(
+            "--experiment fixed_truth_sharp requires a `fixed_truth: "
+            "{checkerboard_block_size: ...}` section in the config -- see "
+            "configs/calibration_fixed_truth.yaml."
+        )
     grid = make_grid(config.grid.W, config.grid.n)
     return synthetic_truth_checkerboard(
         grid,
         s_bg=config.prior.s_bg,
         delta_s=np.sqrt(config.prior.tau2),
-        block_size=SHARP_TRUTH_BLOCK_SIZE,
+        block_size=config.fixed_truth.checkerboard_block_size,
     )
 
 

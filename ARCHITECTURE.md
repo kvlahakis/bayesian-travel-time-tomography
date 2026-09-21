@@ -91,6 +91,79 @@ for that one cell), Bonferroni-corrected across those tests.
 sample size" for the pooled case — only that treating the pooled count as
 the true sample size is wrong.)
 
+## Why Experiment III's per-cell `z` is not `N(0, 1)`, even when well matched
+
+The per-cell KS/z-score diagnostics used in Experiment II rely on `s_true`
+itself being a draw from the prior: conditional on the data, `s_true - s_post
+~ N(0, C_post)` is exact, so standardizing by `sqrt(diag(C_post))` gives
+`z_j ~ N(0, 1)` by construction. Experiment III does not have this property.
+There, `s_true` is fixed and only the observation noise `epsilon` is
+resampled across realizations, so the *frequentist sampling distribution* of
+`z_j` (over repeated noise draws, truth held fixed) is governed by a
+different covariance than `C_post`.
+
+Write the posterior mean's fixed-truth error as
+
+$$
+s_{\rm true} - s_{\rm post} = (I - KA)(s_{\rm true} - s_0) - K\epsilon,
+\qquad
+K = C_s A^\top (A C_s A^\top + \Sigma_d)^{-1},
+$$
+
+which decomposes into a **deterministic regularization bias**
+`(I - KA)(s_true - s0)` (fixed, since `s_true` is fixed — it does not vary
+across realizations) and a **noise-driven term** `-K epsilon` (the only
+random part, since only `epsilon` varies). The repeated-noise sampling
+covariance of `s_post` is therefore
+
+$$
+V_{\rm post} = C_{\rm post}\, A^\top \Sigma_d^{-1} A\, C_{\rm post},
+$$
+
+which is generally *not* equal to `C_post` itself (`C_post` is the Bayesian
+posterior covariance, which also accounts for prior uncertainty about which
+`s_true` might be true — a component that is simply absent when `s_true` is
+fixed). Standardizing the fixed-truth sampling variability by `C_post`'s
+diagonal instead of `V_post`'s gives a per-cell ratio
+
+$$
+r_j = \sqrt{\frac{(V_{\rm post})_{jj}}{(C_{\rm post})_{jj}}},
+$$
+
+which is the *theoretically expected* `std(z_j)` under repeated noise for a
+fixed truth — not 1. Concretely:
+
+- for a well-matched fixed truth (the smooth Gaussian-anomaly truth), `r_j`
+  is well below 1 (empirically `r_j` averages ≈0.27 across cells for the
+  frozen Experiment III smooth baseline, matching the empirical `std(z_j)`
+  per cell to within ≈0.01), producing a *systematically narrow* `z`
+  distribution;
+- for a poorly matched fixed truth (the sharp checkerboard truth), the
+  regularization bias term `(I - KA)(s_true - s0)` is large and the noise
+  term is comparatively small, so the fixed-truth `z_j` is dominated by a
+  large, nearly-deterministic offset rather than the noise-driven spread
+  `V_post` describes — producing a *systematically wide* (and off-center)
+  `z` distribution instead.
+
+**Neither behavior is an Experiment-II-style calibration failure** — it is
+the expected consequence of removing the prior-variability contribution to
+the variance decomposition by fixing `s_true`. Note also that the *pooled*
+`std(z)` reported elsewhere for a fixed truth (pooling across cells, not
+just realizations) is not directly comparable to `r_j`: by the law of total
+variance, `Var(pooled z) = mean_j(Var(z_j)) + Var_j(mean(z_j))`, and the
+per-cell theoretical `r_j` only predicts the first (within-cell) term — the
+second term (the spread, across cells, of the *bias* `(I-KA)(s_true-s0)`,
+which varies spatially for a non-uniform truth like the Gaussian anomaly)
+adds further pooled variance on top.
+
+**Coverage and the fixed-truth behavior of `Q` are the appropriate Experiment
+III diagnostics** (see the "Two different meanings of calibrated" note
+above). The five-cell Bonferroni-corrected KS tests in `test_calibration.py`
+are Experiment-II-specific reference checks — under Experiment III they are
+expected to fail regardless of how well-matched the fixed truth is, for the
+reasons above, and must not be read as a coverage/calibration verdict for
+Experiment III.
+
 ## Out of scope
 
 This is deliberately a finite-dimensional linear-Gaussian problem with an exact
