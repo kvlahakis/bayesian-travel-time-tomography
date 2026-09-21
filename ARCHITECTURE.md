@@ -180,6 +180,113 @@ expected to fail regardless of how well-matched the fixed truth is, for the
 reasons above, and must not be read as a coverage/calibration verdict for
 Experiment III.
 
+## Experiment III: investigating the boundary/interior coverage reversal
+
+The sharp/checkerboard Experiment III baseline (`block_size=4`) shows a
+boundary-vs-interior difference in empirical coverage that is small but
+consistently present, and ad hoc exploration at larger block sizes
+(`block_size=8`, `10`, diagnostic only — no baseline was frozen for either)
+found the reversal growing stronger. This section documents the follow-up
+investigation into that reversal, using the fixed-truth decomposition and
+notation (`K`, `b`, `V_post`) introduced in the section above, and states
+plainly what was and was not established.
+
+### Theoretical `E[Q]` validation
+
+Taking the expectation of `Q = (s_true - s_post)^T C_post^-1 (s_true -
+s_post)` over the repeated-noise randomness, with `s_true - s_post = b -
+K epsilon` as above, gives
+
+$$
+E[Q] = \operatorname{tr}\!\left(C_{\rm post}^{-1} V_{\rm post}\right)
+       + b^\top C_{\rm post}^{-1} b,
+$$
+
+i.e. a noise-driven trace term plus a deterministic-bias term. Both terms
+were computed directly from the frozen Experiment III configuration's `A`,
+`C_post`, and `Sigma_d`, and compared against the empirical mean `Q` from
+the frozen `.npz` baselines:
+
+| case | trace term `tr(C_post^-1 V_post)` | bias term `b^T C_post^-1 b` | theoretical `E[Q]` | empirical mean `Q` | relative discrepancy |
+|---|---|---|---|---|---|
+| smooth | 32.928 | 0.282 | 33.210 | 33.173 | 0.112% |
+| sharp | 32.928 | 21,954,034.70 | 21,954,067.63 | 21,954,065.25 | 0.00001% |
+
+Both cases agree with the empirical mean to well within Monte Carlo sampling
+noise for `N=1000` realizations. This confirms — quantitatively, not just
+qualitatively — that the ~660,000x gap between the smooth and sharp mean
+`Q` is explained by the bias term alone: the trace/noise term is *identical*
+between the two cases (it depends only on `A`, `C_post`, and `Sigma_d`, none
+of which involve `s_true`), so every order of magnitude of the gap comes
+from `b^T C_post^-1 b`.
+
+### Bias-normalized spatial comparison (`block_size=4`)
+
+Ray density and marginal posterior variance (`diag(C_post)`) were compared
+between boundary and interior cells and found nearly indistinguishable (see
+the ray-density and posterior-variance checks elsewhere in this
+investigation's history). To check whether the *bias* or *repeated-noise*
+terms specifically differ spatially even when their raw magnitudes look
+similar, two normalized per-cell ratios were computed at `block_size=4`:
+
+- **A**: `|b_j| / sqrt((C_post)_jj)` — bias relative to claimed posterior
+  uncertainty;
+- **B**: `sqrt((V_post)_jj) / sqrt((C_post)_jj)` — repeated-noise
+  variability relative to claimed posterior uncertainty (this is exactly
+  `r_j` from the section above).
+
+| ratio | boundary (n=300) | interior (n=100) | boundary/interior |
+|---|---|---|---|
+| A | mean 1.936, median 2.054, min 0.021, max 5.038 | mean 1.922, median 2.009, min 0.232, max 4.567 | 1.007 |
+| B | mean 0.275, median 0.260, min 0.161, max 0.456 | mean 0.269, median 0.267, min 0.154, max 0.434 | 1.024 |
+
+Boundary and interior are indistinguishable on both ratios at this block
+size. Ray density, posterior variance, and bias/noise normalized by
+uncertainty were all checked, and **none explains the observed coverage
+difference at `block_size=4`** — the effect may arise from higher-order
+spatial structure not captured by these diagnostics.
+
+### Extending the ray-density and posterior-variance checks to larger block sizes
+
+The same two confounds (ray density, `diag(C_post)`) were re-examined,
+purely by recomputing the boundary/interior grouping at `block_size=8` and
+`10` against the *same* `A`/`C_post` (neither depends on `block_size`; only
+which cells count as "boundary" does) — no re-inversion and no new
+Experiment III baseline was involved:
+
+| block_size | boundary ray count | interior ray count | boundary post. variance | interior post. variance |
+|---|---|---|---|---|
+| 4 | 8.83 | 8.92 | 0.00946 | 0.00922 |
+| 8 | 8.85 | 8.85 | 0.00947 | 0.00934 |
+| 10 | 7.81 | 9.44 | 0.01012 | 0.00899 |
+
+`block_size=8` shows no meaningful difference, consistent with
+`block_size=4`. `block_size=10` shows a real difference reappearing:
+boundary ray count is ~17% lower and boundary posterior variance ~13%
+higher than interior — right at the block size where the coverage reversal
+was previously observed to be strongest.
+
+A specific caveat applies to this `block_size=10` finding: at that size (a
+2x2 checkerboard on the 20x20 grid), the "boundary" cell classification may
+structurally overlap with the domain's actual outer edge, which
+independently has lower ray coverage under the source-left/receiver-right
+acquisition geometry. This means the `block_size=10` result may reflect a
+confound between "checkerboard boundary" and "domain edge" rather than a
+checkerboard-specific effect — this was **not investigated further**.
+
+### Final status
+
+The mechanism behind the boundary/interior coverage reversal is
+**unresolved at `block_size=4`** (the frozen baseline): ray density,
+posterior variance, and both bias/noise normalized ratios were checked and
+none showed a meaningful boundary/interior difference there. A candidate
+confound (overlap between checkerboard-boundary and domain-edge cell
+classification) was **identified but not confirmed** at `block_size=10`.
+This investigation was **deliberately stopped** at this point — no
+eigenmode analysis, no additional block sizes, no alternative acquisition
+geometries were pursued. This is treated as a valid, deliberate stopping
+point for this project, not an unfinished result.
+
 ## Out of scope
 
 This is deliberately a finite-dimensional linear-Gaussian problem with an exact
