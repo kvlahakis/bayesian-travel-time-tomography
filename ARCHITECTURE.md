@@ -139,11 +139,27 @@ fixed truth — not 1. Concretely:
   per cell to within ≈0.01), producing a *systematically narrow* `z`
   distribution;
 - for a poorly matched fixed truth (the sharp checkerboard truth), the
-  regularization bias term `(I - KA)(s_true - s0)` is large and the noise
-  term is comparatively small, so the fixed-truth `z_j` is dominated by a
-  large, nearly-deterministic offset rather than the noise-driven spread
-  `V_post` describes — producing a *systematically wide* (and off-center)
-  `z` distribution instead.
+  deterministic bias `(I - KA)(s_true - s0)` can be large relative to the
+  posterior standard deviation, producing strongly off-center per-cell `z`
+  distributions and substantial spatial variation in their means across
+  cells. **This should not be interpreted as increased within-cell sampling
+  variance across repeated noise draws; the within-cell repeated-noise
+  variance is governed by `V_post`**, which does not depend on `s_true` at
+  all (it is identical for the smooth and sharp truths — only the bias term
+  differs between them). Concretely, for the frozen Experiment III
+  baselines, `tr(C_post^-1 V_post) ≈ 32.93` is the same for both cases,
+  while the bias term `b^T C_post^-1 b` is `≈0.28` for the smooth truth and
+  `≈2.195e7` for the sharp truth — the entire ~7-order-of-magnitude gap in
+  `E[Q]` is a bias effect, not a within-cell-variance effect. The key
+  distinction to keep explicit:
+  - deterministic bias shifts the *mean* of the repeated-noise `z`
+    distribution for a given cell;
+  - `V_post` determines the *within-cell* repeated-noise variability;
+  - spatial variation in the bias across cells can produce substantial
+    variation in the observed per-cell `z` means;
+  - none of this is evidence that the poorly matched case has larger
+    within-cell sampling variance — do not describe it as "wider" without
+    this distinction.
 
 **Neither behavior is an Experiment-II-style calibration failure** — it is
 the expected consequence of removing the prior-variability contribution to
