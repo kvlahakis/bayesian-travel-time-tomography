@@ -78,8 +78,10 @@ def figure_5_experiment_III_fixed_truth() -> None:
         grid,
         smooth_truth=smooth_npz["truths"][0],
         smooth_post_mean=smooth_npz["posterior_means"][0],
+        smooth_post_std=smooth_npz["posterior_stds"][0],
         sharp_truth=sharp_npz["truths"][0],
         sharp_post_mean=sharp_npz["posterior_means"][0],
+        sharp_post_std=sharp_npz["posterior_stds"][0],
         save_path=str(FIGURES_DIR / "figure_5_experiment_III_fixed_truth.png"),
     )
     print("Saved figure_5_experiment_III_fixed_truth.png")

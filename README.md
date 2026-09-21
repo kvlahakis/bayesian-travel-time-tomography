@@ -106,19 +106,35 @@ Curated final figures live under `figures/` (tracked; regenerate with
 `scripts/make_figures.py`, which reads `configs/baseline.yaml` and the frozen
 `results/baselines/` outputs and never regenerates those baselines):
 
-1. `figure_1_geometry.png` — domain, sources, receivers, a sample of rays.
+![Experiment I reconstruction: true field, posterior mean, posterior std, and reconstruction error](figures/figure_3_experiment_I_reconstruction.png)
+
+1. `figure_1_geometry.png` — domain, sources, receivers, a small deterministic
+   sample of rays (one per source) plus one highlighted ray with the grid
+   cells it actually intersects shaded.
 2. `figure_2_ray_coverage.png` — per-cell total ray-intersection length.
-3. `figure_3_experiment_I_reconstruction.png` — true field / posterior mean /
-   posterior std / reconstruction error.
+3. `figure_3_experiment_I_reconstruction.png` (above) — true field / posterior
+   mean / posterior std / reconstruction error. The fourth panel is the
+   absolute error for a *single noisy realization*; its unstructured
+   appearance reflects that one realization's noise draw, not a systematic
+   spatial error pattern.
 4. `figure_4_experiment_II_calibration.png` — `Q` vs. `chi2(n_cells)`, and
    coverage vs. nominal.
-5. `figure_5_experiment_III_fixed_truth.png` — smooth vs. sharp truth and
-   posterior mean.
+5. `figure_5_experiment_III_fixed_truth.png` — smooth vs. sharp truth,
+   posterior mean, and posterior std (six panels). The two posterior-std
+   panels are visually indistinguishable, and this is the *correct* result,
+   not a plotting artifact: `C_post` depends only on `A`, `Cs`, and `Sigma_d`
+   — never on `s_true` (confirmed numerically: the two frozen baselines'
+   `posterior_stds` are bit-identical) — so the posterior's claimed
+   uncertainty is the same regardless of whether the fixed truth matches the
+   prior.
 6. `figure_6_fixed_truth_Q_decomposition.png` — the `E[Q] = tr(C_post^-1
-   V_post) + b^T C_post^-1 b` decomposition, smooth vs. sharp.
+   V_post) + b^T C_post^-1 b` decomposition, smooth vs. sharp, with numeric
+   value labels on every bar (the smooth bias term, ~0.28, is otherwise
+   invisible on a log axis spanning ~10^0 to ~10^7).
 7. `figure_7_boundary_interior_coverage.png` — the sharp-truth
    boundary/interior coverage comparison from `ARCHITECTURE.md`'s
-   investigation (shown as-is, not re-derived).
+   investigation (shown as-is, not re-derived); the subtitle on the figure
+   itself states what was checked and that none of it explains the gap.
 
 ## Development
 
