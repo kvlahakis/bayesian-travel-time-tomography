@@ -11,14 +11,61 @@ from pathlib import Path
 
 import numpy as np
 
-from tomography.config import load_config
-from tomography.experiments import run_correctly_specified, run_construction_validation
+from tomography.config import ExperimentConfig, load_config
+from tomography.experiments import (
+    run_construction_validation,
+    run_correctly_specified,
+    run_fixed_truth,
+)
+from tomography.forward import synthetic_truth_checkerboard, synthetic_truth_gaussian_anomaly
+from tomography.geometry import make_grid
 from tomography.plots import plot_field_triplet
+
+
+# block_size=4 (not 2): with block_size=2 on a 20x20 grid, *every* cell sits
+# on a block edge (its 4-neighbors always cross into a different block), so
+# there is no "interior" region to contrast against block boundaries at all.
+# block_size=4 gives 100/400 genuine interior cells (25%) alongside boundary
+# cells, which is what a boundary-vs-interior coverage comparison needs.
+SHARP_TRUTH_BLOCK_SIZE = 4
+
+
+def _smooth_fixed_truth(config: ExperimentConfig) -> np.ndarray:
+    # Matches run_construction_validation's (Experiment I's) own default
+    # exactly -- delta_s is *derived* from the prior's marginal variance,
+    # not a separately chosen literal, so the smooth fixed truth here really
+    # is "the Experiment I truth", not a coincidentally similar new field.
+    grid = make_grid(config.grid.W, config.grid.n)
+    return synthetic_truth_gaussian_anomaly(
+        grid,
+        s_bg=config.prior.s_bg,
+        delta_s=np.sqrt(config.prior.tau2),
+        x0=config.grid.W / 2,
+        y0=config.grid.W / 2,
+        r=config.grid.W / 6,
+    )
+
+
+def _sharp_fixed_truth(config: ExperimentConfig) -> np.ndarray:
+    grid = make_grid(config.grid.W, config.grid.n)
+    return synthetic_truth_checkerboard(
+        grid,
+        s_bg=config.prior.s_bg,
+        delta_s=np.sqrt(config.prior.tau2),
+        block_size=SHARP_TRUTH_BLOCK_SIZE,
+    )
+
 
 EXPERIMENTS = {
     "construction_validation": run_construction_validation,
     "correctly_specified": lambda config: run_correctly_specified(
         config, n_repeats=config.n_repeats
+    ),
+    "fixed_truth_smooth": lambda config: run_fixed_truth(
+        config, _smooth_fixed_truth(config), n_repeats=config.n_repeats
+    ),
+    "fixed_truth_sharp": lambda config: run_fixed_truth(
+        config, _sharp_fixed_truth(config), n_repeats=config.n_repeats
     ),
 }
 
@@ -34,7 +81,11 @@ def _save_construction_validation(result, out_path: Path) -> None:
     )
 
 
-def _save_correctly_specified(result, out_path: Path) -> None:
+def _save_experiment_results(result, out_path: Path) -> None:
+    """Saver for any repeated-run `ExperimentResults` (Experiments II/III/...):
+    `run_correctly_specified` and `run_fixed_truth` both return this same
+    stacked-diagnostics shape.
+    """
     np.savez(
         out_path,
         truths=result.truths,
@@ -50,13 +101,15 @@ def _save_correctly_specified(result, out_path: Path) -> None:
 
 SAVERS = {
     "construction_validation": _save_construction_validation,
-    "correctly_specified": _save_correctly_specified,
+    "correctly_specified": _save_experiment_results,
+    "fixed_truth_smooth": _save_experiment_results,
+    "fixed_truth_sharp": _save_experiment_results,
 }
 
 # Experiments whose result carries a grid/s_true/s_post/C_post suitable for
-# the three-panel field plot. `correctly_specified` stacks many realizations
-# instead, so it has no single field to plot here -- see plots.py for the Q
-# histogram and coverage plots that suit it once experiments.py produces them.
+# the three-panel field plot. The repeated-run experiments stack many
+# realizations instead, so they have no single field to plot here -- see
+# plots.py for the Q histogram and coverage plots that suit them.
 PLOTTABLE = {"construction_validation"}
 
 

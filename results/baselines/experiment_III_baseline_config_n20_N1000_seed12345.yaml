@@ -1,0 +1,34 @@
+# Experiment III: deterministic truth, repeated observation noise.
+#
+# s_true is a fixed, deterministic field (NOT a draw from Cs) -- either the
+# smooth Gaussian-anomaly truth or the sharp checkerboard truth, selected via
+# `--experiment fixed_truth_smooth` / `fixed_truth_sharp`. Only the noise
+# realization varies across repeats: d^(k) = A s_true + eps^(k). Unlike
+# calibration_correct.yaml, there is no guarantee that Q ~ chi2(n_cells) here
+# -- see ARCHITECTURE.md.
+#
+# ell_true is unused by run_fixed_truth (the truth isn't drawn from any Cs),
+# and is set equal to ell_infer here only because the config schema always
+# requires both fields.
+
+grid:
+  W: 10.0
+  n: 20
+
+acquisition:
+  Ns: 12
+  Nr: 12
+
+noise:
+  sigma_true: 0.02
+  sigma_infer: 0.02
+
+prior:
+  tau2: 0.04
+  ell_true: 2.0
+  ell_infer: 2.0
+  s_bg: 1.0
+  jitter_relative: 1.0e-6
+
+n_repeats: 1000
+seed: 12345

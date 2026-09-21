@@ -13,10 +13,22 @@ its truth-generation rule) and `run_correctly_specified` (the named entry
 point, which additionally checks that `config` really is correctly
 specified). See `ARCHITECTURE.md` for what "correctly specified" means and
 why `Q ~ chi2(n)` here validates the implementation rather than a deeper
-statistical claim. Experiments III-V (fixed truth, prior misspecification,
-noise misspecification) each need extra truth-generation logic beyond what
-`config` alone specifies, so they get their own functions rather than reusing
-`run_once`/`run_repeated`.
+statistical claim.
+
+Experiment III (`run_fixed_truth`) holds a deterministic, externally supplied
+`s_true` fixed and repeats only the noise draw. Unlike Experiment II, nothing
+about this truth is drawn from `Cs_infer`, so there is no guarantee that
+`Q ~ chi2(n)` here (see `ARCHITECTURE.md`); whether the posterior stays
+calibrated depends entirely on how well `s_true` matches what `Cs_infer`
+expects. `run_repeated` and `run_fixed_truth` differ only in what varies
+across realizations (truth and noise, vs. noise alone), so they share a
+common per-realization-diagnostics-and-stacking helper,
+`_run_repeated_from_draws`.
+
+Experiments IV and V (prior misspecification, noise misspecification) each
+need extra truth/inference-generation logic beyond what these two share, so
+they will get their own functions rather than reusing `_run_repeated_from_draws`
+directly.
 """
 
 from __future__ import annotations
@@ -179,12 +191,13 @@ def _check_correctly_specified(config: ExperimentConfig) -> None:
         )
 
 
-def _build_correctly_specified_components(
+def _build_geometry_and_inference_prior(
     config: ExperimentConfig,
 ) -> tuple[Grid, np.ndarray, np.ndarray, np.ndarray]:
-    """Build the grid, A, Cs_infer, and s0 shared across every realization of
-    Experiment II. These depend only on `config`, not on any particular
-    realization, so `run_repeated` builds them once rather than per repeat.
+    """Build the grid, A, Cs_infer, and s0 that a config alone determines --
+    shared across every realization of any experiment built from this
+    `config` (currently Experiments II and III), since none of these four
+    depend on a particular realization's truth or noise draw.
     """
     grid = make_grid(config.grid.W, config.grid.n)
     sources, receivers = make_sources_receivers(
@@ -205,6 +218,56 @@ def _build_correctly_specified_components(
     )
     s0 = config.prior.s_bg * np.ones(grid.n**2)
     return grid, A, Cs_infer, s0
+
+
+def _run_repeated_from_draws(
+    n_repeats: int,
+    n_cells: int,
+    draw_realization,
+    alphas: tuple[float, ...],
+) -> ExperimentResults:
+    """Run `n_repeats` realizations from `draw_realization`, a zero-argument
+    callable returning `(s_true, s_post, C_post)` for one realization
+    (closing over whatever is fixed vs. drawn for the calling experiment),
+    compute the standard per-realization diagnostics for each, and stack
+    them into an `ExperimentResults`.
+
+    Shared by every repeated-run experiment harness that reduces to "compute
+    a posterior against some truth and some noisy data, once per
+    realization" -- currently `run_repeated` (Experiment II) and
+    `run_fixed_truth` (Experiment III), which differ only in what
+    `draw_realization` holds fixed.
+    """
+    truths = np.empty((n_repeats, n_cells))
+    posterior_means = np.empty((n_repeats, n_cells))
+    posterior_stds = np.empty((n_repeats, n_cells))
+    relative_errors = np.empty(n_repeats)
+    z_scores = np.empty((n_repeats, n_cells))
+    mahalanobis_values = np.empty(n_repeats)
+
+    for k in range(n_repeats):
+        s_true, s_post, C_post = draw_realization()
+        truths[k] = s_true
+        posterior_means[k] = s_post
+        posterior_stds[k] = np.sqrt(np.diag(C_post))
+        relative_errors[k] = relative_error(s_post, s_true)
+        z_scores[k] = standardized_errors(s_true, s_post, C_post)
+        mahalanobis_values[k] = mahalanobis(s_true, s_post, C_post)
+
+    coverage = {
+        alpha: empirical_coverage(truths, posterior_means, posterior_stds, alpha)["overall"]
+        for alpha in alphas
+    }
+
+    return ExperimentResults(
+        truths=truths,
+        posterior_means=posterior_means,
+        posterior_stds=posterior_stds,
+        relative_errors=relative_errors,
+        z_scores=z_scores,
+        mahalanobis=mahalanobis_values,
+        coverage=coverage,
+    )
 
 
 def _run_correctly_specified_realization(
@@ -265,7 +328,7 @@ def run_once(
     specified" means.
     """
     _check_correctly_specified(config)
-    _, A, Cs_infer, s0 = _build_correctly_specified_components(config)
+    _, A, Cs_infer, s0 = _build_geometry_and_inference_prior(config)
     rng = np.random.default_rng(config.seed)
     return _run_correctly_specified_realization(
         A,
@@ -294,48 +357,19 @@ def run_repeated(
     `test_reproducibility.py`).
     """
     _check_correctly_specified(config)
-    _, A, Cs_infer, s0 = _build_correctly_specified_components(config)
+    _, A, Cs_infer, s0 = _build_geometry_and_inference_prior(config)
     rng = np.random.default_rng(seed)
 
-    n_cells = A.shape[1]
-    truths = np.empty((n_repeats, n_cells))
-    posterior_means = np.empty((n_repeats, n_cells))
-    posterior_stds = np.empty((n_repeats, n_cells))
-    relative_errors = np.empty(n_repeats)
-    z_scores = np.empty((n_repeats, n_cells))
-    mahalanobis_values = np.empty(n_repeats)
-
-    for k in range(n_repeats):
-        realization = _run_correctly_specified_realization(
-            A,
-            Cs_infer,
-            s0,
-            config.noise.sigma_true,
-            config.noise.sigma_infer,
-            rng,
-            alphas,
+    def draw_realization():
+        s_true = sample_prior(s0, Cs_infer, rng)
+        t_true = forward(A, s_true)
+        d = add_noise(t_true, sigma=config.noise.sigma_true, rng=rng)
+        s_post, C_post = posterior_isotropic(
+            A, d, sigma2=config.noise.sigma_infer**2, Cs=Cs_infer, s0=s0
         )
-        truths[k] = realization.truth
-        posterior_means[k] = realization.posterior_mean
-        posterior_stds[k] = realization.posterior_std
-        relative_errors[k] = realization.relative_error
-        z_scores[k] = realization.z_scores
-        mahalanobis_values[k] = realization.mahalanobis
+        return s_true, s_post, C_post
 
-    coverage = {
-        alpha: empirical_coverage(truths, posterior_means, posterior_stds, alpha)["overall"]
-        for alpha in alphas
-    }
-
-    return ExperimentResults(
-        truths=truths,
-        posterior_means=posterior_means,
-        posterior_stds=posterior_stds,
-        relative_errors=relative_errors,
-        z_scores=z_scores,
-        mahalanobis=mahalanobis_values,
-        coverage=coverage,
-    )
+    return _run_repeated_from_draws(n_repeats, A.shape[1], draw_realization, alphas)
 
 
 def run_correctly_specified(config: ExperimentConfig, n_repeats: int) -> ExperimentResults:
@@ -348,3 +382,45 @@ def run_correctly_specified(config: ExperimentConfig, n_repeats: int) -> Experim
     statistical claim (see `ARCHITECTURE.md`). Uses `config.seed`.
     """
     return run_repeated(config, n_repeats, seed=config.seed)
+
+
+def run_fixed_truth(
+    config: ExperimentConfig,
+    s_true: np.ndarray,
+    n_repeats: int,
+    alphas: tuple[float, ...] = DEFAULT_COVERAGE_ALPHAS,
+) -> ExperimentResults:
+    """Experiment III: a fixed, deterministic truth with repeated noise draws.
+
+    `s_true` is supplied by the caller as a deterministic field -- e.g.
+    `forward.synthetic_truth_gaussian_anomaly` for the smooth truth, or
+    `forward.synthetic_truth_checkerboard` for the sharp one (PDF Section 9)
+    -- and is *not* regarded as a draw from `Cs_infer`. Only the observation
+    noise varies across realizations: `d^(k) = A s_true + eps^(k)`,
+    `eps^(k) ~ N(0, sigma_true^2 I)`; inference uses `Cs_infer` (built from
+    `config.prior.ell_infer`) and `sigma_infer^2` throughout.
+
+    Unlike `run_repeated`, there is *no general guarantee* that
+    `Q ~ chi2(n_cells)` here: whether the posterior stays well calibrated
+    depends entirely on how well `s_true` matches what `Cs_infer` expects
+    (see `ARCHITECTURE.md`'s "Two different meanings of calibrated" note).
+    Run this once with a smooth truth and once with a sharp one to produce
+    the coverage comparison that is this project's central result.
+
+    As in `run_construction_validation` (Experiment I), this is not a
+    misspecification experiment: it uses `config.noise.sigma_true` to
+    generate the data and `config.noise.sigma_infer` for inference, which
+    the caller's config should set equal to each other. Uses `config.seed`.
+    """
+    _, A, Cs_infer, s0 = _build_geometry_and_inference_prior(config)
+    rng = np.random.default_rng(config.seed)
+    t_true = forward(A, s_true)  # fixed truth -> fixed noiseless travel times
+
+    def draw_realization():
+        d = add_noise(t_true, sigma=config.noise.sigma_true, rng=rng)
+        s_post, C_post = posterior_isotropic(
+            A, d, sigma2=config.noise.sigma_infer**2, Cs=Cs_infer, s0=s0
+        )
+        return s_true, s_post, C_post
+
+    return _run_repeated_from_draws(n_repeats, A.shape[1], draw_realization, alphas)
