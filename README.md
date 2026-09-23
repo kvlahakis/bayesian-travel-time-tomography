@@ -124,18 +124,26 @@ without also updating this note.
 
 ## Scope
 
-This project is deliberately limited to a finite-dimensional, closed-form
-linear-Gaussian model. Experiment IV compares exactly three predetermined
-acquisition geometries (uniform and two boundary-clustered layouts) — it is
-not a systematic acquisition-geometry sweep, and no optimizer, additional
-gamma values, or asymmetric layouts are part of it. The project also does not
-include a controlled prior-misspecification experiment or a controlled
-noise-misspecification experiment — the fixed-truth comparison in Experiment
-III already demonstrates the same central phenomenon (a well-defined posterior
-failing to describe physical uncertainty under model mismatch) via a
-mismatched truth instead. See `experiment.pdf`'s "Scope and interpretation"
-section for the complete list of excluded effects (curved rays, attenuation,
-wave-equation simulation, and others).
+This project studies Bayesian uncertainty quantification for a
+finite-dimensional, linear-Gaussian travel-time tomography model.
+
+The forward model uses straight-ray travel times through a 2D
+piecewise-constant slowness field. A Gaussian squared-exponential prior
+and Gaussian observation noise give an analytically tractable posterior,
+allowing reconstruction accuracy and uncertainty calibration to be
+examined directly.
+
+The experiments progress from forward-model construction and validation,
+through calibration under the correctly specified generative model, to
+fixed-truth experiments that illustrate the effect of prior–truth
+mismatch on posterior uncertainty, and finally to a predetermined
+acquisition-geometry comparison (Experiment IV). Experiment IV compares
+exactly three predetermined geometries (uniform and two boundary-clustered
+layouts) — it is not a systematic acquisition-geometry sweep, and no
+optimizer, additional gamma values, or asymmetric layouts are part of it. A
+controlled prior-misspecification experiment and a controlled
+noise-misspecification experiment are likewise not part of this project. For
+more details about the experiments please refer to `experiment.pdf`.
 
 ## Figures
 
