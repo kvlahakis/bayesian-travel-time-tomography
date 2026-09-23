@@ -21,6 +21,17 @@ well-defined posterior in both cases. This distinction, between a posterior
 being mathematically well defined and a posterior being a trustworthy
 description of physical uncertainty, is the project's central finding.
 
+**Key results:**
+
+- The posterior is available in exact closed form — no MCMC, no iterative
+  optimization — via Cholesky factorizations and triangular solves throughout.
+- Under the correctly specified generative model, `Q ~ chi2(n_cells)` is
+  confirmed empirically over 1000 independent realizations.
+- The fixed-truth smooth/sharp comparison shows how prior-truth compatibility
+  governs coverage, with an identically well-defined posterior in both cases.
+- The analytical `E[Q]` decomposition identifies deterministic bias — not
+  observation noise — as the mechanism behind the sharp truth's inflated `Q`.
+
 ## Model
 
 Domain `Omega = [0, W]^2`, sources on `x=0`, receivers on `x=W`, straight rays
@@ -92,49 +103,63 @@ configuration without also updating this note.
 This project is deliberately limited to a finite-dimensional, closed-form
 linear-Gaussian model. It does not include a systematic acquisition-geometry
 sweep, a controlled prior-misspecification experiment, or a controlled
-noise-misspecification experiment: the fixed-truth comparison in Experiment
-III already demonstrates the central phenomenon those experiments would also
-illustrate — a well-defined posterior failing to describe physical uncertainty
-under model mismatch — via a mismatched truth rather than a mismatched prior
-or noise model. See `experiment.pdf`'s "Scope and interpretation" section for
-the complete list of excluded effects (curved rays, attenuation, wave-equation
-simulation, and others).
+noise-misspecification experiment — the fixed-truth comparison in Experiment
+III already demonstrates the same central phenomenon (a well-defined posterior
+failing to describe physical uncertainty under model mismatch) via a
+mismatched truth instead. See `experiment.pdf`'s "Scope and interpretation"
+section for the complete list of excluded effects (curved rays, attenuation,
+wave-equation simulation, and others).
 
 ## Figures
 
 Curated final figures live under `figures/` (tracked; regenerate with
 `scripts/make_figures.py`, which reads `configs/baseline.yaml` and the frozen
-`results/baselines/` outputs and never regenerates those baselines):
+`results/baselines/` outputs and never regenerates those baselines). On-image
+text is kept short and purely descriptive; the findings below live in this
+README, not baked into the images, so the figures stay reusable elsewhere
+with their own captions.
 
-![Experiment I reconstruction: true field, posterior mean, posterior std, and reconstruction error](figures/figure_3_experiment_I_reconstruction.png)
+Primary sequence — geometry → forward operator → Experiment I → Experiment II
+→ Experiment III → Q decomposition:
+
+![Experiment I reconstruction: true field, posterior mean, posterior standard deviation, and absolute reconstruction error](figures/figure_3_experiment_I_reconstruction.png)
 
 1. `figure_1_geometry.png` — domain, sources, receivers, a small deterministic
-   sample of rays (one per source) plus one highlighted ray with the grid
-   cells it actually intersects shaded.
-2. `figure_2_ray_coverage.png` — per-cell total ray-intersection length.
+   sample of rays plus one highlighted ray with the cells it intersects.
+2. `figure_2_ray_coverage.png` — per-cell total ray-intersection length. The
+   exactly-zero band along the outer top/bottom rows is expected (sources and
+   receivers occupy an open subinterval of the boundary, so no ray reaches
+   the outermost half-cell strip); the dark-but-nonzero left/right edge
+   columns reflect fewer/longer rays there, not zero coverage — verified
+   directly from `A`, not assumed.
 3. `figure_3_experiment_I_reconstruction.png` (above) — true field / posterior
-   mean / posterior std / reconstruction error. The fourth panel is the
-   absolute error for a *single noisy realization*; its unstructured
-   appearance reflects that one realization's noise draw, not a systematic
-   spatial error pattern.
-4. `figure_4_experiment_II_calibration.png` — `Q` vs. `chi2(n_cells)`, and
-   coverage vs. nominal.
+   mean / posterior standard deviation / absolute reconstruction error. The
+   fourth panel is one noisy realization's error, not a systematic spatial
+   pattern.
+4. `figure_4_experiment_II_calibration.png` — global `Q` vs. `chi2(n_cells)`,
+   and credible-region coverage vs. nominal.
 5. `figure_5_experiment_III_fixed_truth.png` — smooth vs. sharp truth,
-   posterior mean, and posterior std (six panels). The two posterior-std
-   panels are visually indistinguishable, and this is the *correct* result,
-   not a plotting artifact: `C_post` depends only on `A`, `Cs`, and `Sigma_d`
-   — never on `s_true` (confirmed numerically: the two frozen baselines'
-   `posterior_stds` are bit-identical) — so the posterior's claimed
-   uncertainty is the same regardless of whether the fixed truth matches the
-   prior.
+   posterior mean, and posterior standard deviation (six panels). The two
+   posterior-std panels are confirmed numerically identical (bit-identical
+   `posterior_stds` in the frozen baselines): `C_post` depends only on the
+   acquisition geometry, prior, and noise level, never on `s_true`, so the
+   posterior's claimed uncertainty is blind to whether the fixed truth
+   actually matches the prior.
 6. `figure_6_fixed_truth_Q_decomposition.png` — the `E[Q] = tr(C_post^-1
-   V_post) + b^T C_post^-1 b` decomposition, smooth vs. sharp, with numeric
-   value labels on every bar (the smooth bias term, ~0.28, is otherwise
-   invisible on a log axis spanning ~10^0 to ~10^7).
-7. `figure_7_boundary_interior_coverage.png` — the sharp-truth
-   boundary/interior coverage comparison from `ARCHITECTURE.md`'s
-   investigation (shown as-is, not re-derived); the subtitle on the figure
-   itself states what was checked and that none of it explains the gap.
+   V_post) + b^T C_post^-1 b` decomposition (components panel) and its
+   theoretical-vs-empirical total (right panel), smooth vs. sharp, with
+   numeric value labels on every bar (the smooth bias term, ~0.28, would
+   otherwise be invisible on a log axis spanning ~10^0 to ~10^7).
+
+**Supplementary diagnostic figure** (not part of the primary result
+sequence):
+
+7. `figure_7_boundary_interior_coverage.png` — a follow-up spatial check for
+   the sharp truth. Ray density, posterior variance, and bias/noise ratios
+   normalized by posterior uncertainty were all checked at `block_size=4`,
+   and none explains the boundary/interior coverage gap shown here; the
+   effect may arise from higher-order spatial structure not captured by
+   these diagnostics (see `ARCHITECTURE.md`).
 
 ## Development
 

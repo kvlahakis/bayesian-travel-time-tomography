@@ -22,6 +22,22 @@ from scipy.stats import chi2
 
 from .geometry import Grid, build_sensitivity_matrix
 
+# Shared minimal typographic/DPI style for every figure in this module --
+# consistency only, not a layout redesign. Figure DPI is set once here
+# (`savefig.dpi`), so individual `fig.savefig(save_path)` calls below do not
+# repeat it.
+plt.rcParams.update({
+    "font.family": "sans-serif",
+    "font.size": 10,
+    "axes.titlesize": 11,
+    "axes.labelsize": 10,
+    "xtick.labelsize": 9,
+    "ytick.labelsize": 9,
+    "legend.fontsize": 9,
+    "figure.dpi": 100,
+    "savefig.dpi": 150,
+})
+
 
 def _as_image(field: np.ndarray, grid: Grid) -> np.ndarray:
     """Reshape a flat (n**2,) field into an (n, n) image for imshow.
@@ -81,7 +97,7 @@ def plot_field_triplet(
     fig.colorbar(im_std, ax=axes[2], shrink=0.85, label="posterior std")
 
     if save_path is not None:
-        fig.savefig(save_path, dpi=150)
+        fig.savefig(save_path)
 
     return fig
 
@@ -103,6 +119,9 @@ def plot_reconstruction_summary(
     fig, axes = plt.subplots(1, 4, figsize=(19, 4.5), constrained_layout=True)
     extent = [0.0, grid.W, 0.0, grid.W]
 
+    # Shared color scale for truth and posterior mean, computed once and
+    # passed as the same vmin/vmax to both imshow calls below -- guaranteed
+    # to be identical by construction, not merely coincidentally matching.
     vmin = min(s_true.min(), s_post.min())
     vmax = max(s_true.max(), s_post.max())
     for ax, field, title in zip(
@@ -120,22 +139,25 @@ def plot_reconstruction_summary(
     im_std = axes[2].imshow(
         _as_image(s_std, grid), origin="lower", extent=extent, cmap="magma"
     )
-    axes[2].set_title("Posterior std")
+    axes[2].set_title("Posterior standard deviation")
     axes[2].set_xlabel("x")
     axes[2].set_ylabel("y")
     fig.colorbar(im_std, ax=axes[2], shrink=0.85, label="posterior std")
 
+    # Not smoothed, filtered, or otherwise altered: this panel's unstructured
+    # appearance (one noisy realization's error, not a systematic spatial
+    # pattern) is scientifically correct and must render exactly as computed.
     error = np.abs(s_true - s_post)
     im_err = axes[3].imshow(
         _as_image(error, grid), origin="lower", extent=extent, cmap="magma"
     )
-    axes[3].set_title("|Reconstruction error|")
+    axes[3].set_title("Absolute reconstruction error")
     axes[3].set_xlabel("x")
     axes[3].set_ylabel("y")
     fig.colorbar(im_err, ax=axes[3], shrink=0.85, label="|s_true - s_post|")
 
     if save_path is not None:
-        fig.savefig(save_path, dpi=150)
+        fig.savefig(save_path)
 
     return fig
 
@@ -190,7 +212,7 @@ def plot_geometry_schematic(
         i, j = divmod(int(cell), grid.n)
         x0, x1 = grid.edges[j], grid.edges[j + 1]
         y0, y1 = grid.edges[i], grid.edges[i + 1]
-        ax.add_patch(Rectangle((x0, y0), x1 - x0, y1 - y0, facecolor="gold", alpha=0.5, zorder=0.5))
+        ax.add_patch(Rectangle((x0, y0), x1 - x0, y1 - y0, facecolor="gold", alpha=0.25, zorder=0.5))
 
     s_h, r_h = highlight_source[0], highlight_receiver[0]
     ax.plot([s_h[0], r_h[0]], [s_h[1], r_h[1]], color="crimson", linewidth=2.5, zorder=3,
@@ -206,11 +228,11 @@ def plot_geometry_schematic(
     ax.set_aspect("equal")
     ax.set_xlabel("x")
     ax.set_ylabel("y")
-    ax.set_title(f"Acquisition geometry ({Ns} sources x {Nr} receivers)")
-    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.1), ncol=2, frameon=False, fontsize=9)
+    ax.set_title(f"Acquisition geometry: {Ns} sources × {Nr} receivers")
+    ax.legend(loc="lower right", frameon=True, framealpha=0.85, fontsize=8)
 
     if save_path is not None:
-        fig.savefig(save_path, dpi=150)
+        fig.savefig(save_path)
 
     return fig
 
@@ -221,6 +243,17 @@ def plot_ray_coverage(grid: Grid, A: np.ndarray, save_path: str | None = None) -
     domain (cells near the domain's horizontal midline, where most
     source-receiver rays are shortest and most direct, are typically better
     covered than corner cells).
+
+    The near-zero-looking top/bottom rows are *exactly* zero (sources and
+    receivers span an open subinterval of the boundary, per
+    `geometry.make_sources_receivers`'s spacing convention, so no ray can
+    reach the outermost half-cell-thick strip at either vertical extreme --
+    this is expected, not a plotting artifact). The dark-but-nonzero
+    left/right edge columns are a different, non-degenerate effect: cells
+    there are covered by fewer/longer rays than the domain center, not by
+    zero rays (see `README.md`/session notes for the verified per-cell
+    values). `imshow`'s pixel centers already align with grid cell centers
+    given this reshape and `extent`, so no interpolation is used or needed.
     """
     ray_length_per_cell = A.sum(axis=0)
 
@@ -231,13 +264,14 @@ def plot_ray_coverage(grid: Grid, A: np.ndarray, save_path: str | None = None) -
         extent=[0.0, grid.W, 0.0, grid.W],
         cmap="magma",
     )
-    ax.set_title("Ray coverage: total intersection length per cell")
+    ax.set_aspect("equal")
+    ax.set_title("Ray coverage across the reconstruction grid")
     ax.set_xlabel("x")
     ax.set_ylabel("y")
-    fig.colorbar(im, ax=ax, shrink=0.85, label="sum of A[:, j] (total ray length)")
+    fig.colorbar(im, ax=ax, shrink=0.85, label="Total ray-intersection length")
 
     if save_path is not None:
-        fig.savefig(save_path, dpi=150)
+        fig.savefig(save_path)
 
     return fig
 
@@ -264,7 +298,7 @@ def plot_calibration_summary(
                  label=f"chi2(n_cells={n_cells}) density")
     axes[0].set_xlabel("Q")
     axes[0].set_ylabel("density")
-    axes[0].set_title("Experiment II: Q vs. chi2(n_cells)")
+    axes[0].set_title("Global Q calibration")
     axes[0].legend(frameon=False)
 
     alphas = sorted(coverage)
@@ -274,14 +308,18 @@ def plot_calibration_summary(
     axes[1].plot(nominal, empirical, marker="o", color="steelblue", label="empirical coverage")
     axes[1].set_xlabel("nominal coverage (1 - alpha)")
     axes[1].set_ylabel("empirical coverage")
-    axes[1].set_title("Experiment II: coverage vs. nominal")
+    axes[1].set_title("Credible-region coverage")
+    # Axis limits are fixed to the full unit square only so the diagonal
+    # reference line reads correctly; the empirical-coverage line itself is
+    # plotted only over the actually-tested nominal levels, not extended to
+    # (0, 0).
     axes[1].set_xlim(0, 1)
     axes[1].set_ylim(0, 1)
     axes[1].set_aspect("equal")
     axes[1].legend(frameon=False, loc="upper left")
 
     if save_path is not None:
-        fig.savefig(save_path, dpi=150)
+        fig.savefig(save_path)
 
     return fig
 
@@ -300,79 +338,96 @@ def plot_fixed_truth_comparison(
     mean, and posterior std, one row per truth (six panels total).
 
     Truth and posterior mean (both rows) share one `viridis` scale (same
-    physical quantity, same units). The two posterior-std panels share their
-    own `magma` scale, deliberately fixed to be identical for both rows: per
-    `ARCHITECTURE.md`'s fixed-truth decomposition, `C_post` depends only on
-    `A`, `Cs`, and `Sigma_d`, never on `s_true`, so the smooth and sharp
-    posterior standard deviations are expected to be (and, for this
-    project's frozen baselines, are confirmed numerically to be) identical.
-    The two std panels looking visually indistinguishable is therefore the
-    *correct* result, not a plotting artifact -- it is a direct visual
-    demonstration that the posterior's claimed uncertainty is blind to
-    whether the fixed truth matches the prior.
+    physical quantity, same units), computed once as `vmin`/`vmax` from all
+    four of those panels and passed identically to each -- guaranteed by
+    construction, not incidental. The two posterior-std panels likewise
+    share one `magma` scale (`std_vmin`/`std_vmax` from both std panels).
+    That the two posterior-std panels render identically is expected (see
+    `ARCHITECTURE.md`'s fixed-truth decomposition: `C_post` depends only on
+    `A`, `Cs`, and `Sigma_d`, never on `s_true`) and confirmed numerically
+    for this project's frozen baselines -- see `README.md` for the finding
+    stated in prose; this on-image text stays purely descriptive so the
+    figure remains reusable with a different caption elsewhere.
     """
     fig, axes = plt.subplots(2, 3, figsize=(15, 9), constrained_layout=True)
     extent = [0.0, grid.W, 0.0, grid.W]
 
-    slowness_fields = [
-        (smooth_truth, "Smooth truth (Gaussian anomaly)"),
-        (smooth_post_mean, "Smooth: posterior mean"),
-        (sharp_truth, "Sharp truth (checkerboard)"),
-        (sharp_post_mean, "Sharp: posterior mean"),
-    ]
-    vmin = min(f.min() for f, _ in slowness_fields)
-    vmax = max(f.max() for f, _ in slowness_fields)
+    slowness_fields = [smooth_truth, smooth_post_mean, sharp_truth, sharp_post_mean]
+    vmin = min(f.min() for f in slowness_fields)
+    vmax = max(f.max() for f in slowness_fields)
 
-    std_fields = [
-        (smooth_post_std, "Smooth: posterior std"),
-        (sharp_post_std, "Sharp: posterior std"),
-    ]
-    std_vmin = min(f.min() for f, _ in std_fields)
-    std_vmax = max(f.max() for f, _ in std_fields)
+    std_fields = [smooth_post_std, sharp_post_std]
+    std_vmin = min(f.min() for f in std_fields)
+    std_vmax = max(f.max() for f in std_fields)
 
-    for row, (truth, mean, std, prefix) in enumerate(
-        [(smooth_truth, smooth_post_mean, smooth_post_std, "Smooth"),
-         (sharp_truth, sharp_post_mean, sharp_post_std, "Sharp")]
+    column_titles = ["Truth", "Posterior mean", "Posterior standard deviation"]
+    row_labels = ["Smooth truth", "Sharp truth"]
+
+    for row, (truth, mean, std, row_label) in enumerate(
+        [(smooth_truth, smooth_post_mean, smooth_post_std, row_labels[0]),
+         (sharp_truth, sharp_post_mean, sharp_post_std, row_labels[1])]
     ):
-        for col, (field, title) in enumerate([
-            (truth, f"{prefix} truth" + (" (Gaussian anomaly)" if row == 0 else " (checkerboard)")),
-            (mean, f"{prefix}: posterior mean"),
-        ]):
+        for col, field in enumerate([truth, mean]):
             im = axes[row, col].imshow(
                 _as_image(field, grid), origin="lower", extent=extent,
                 cmap="viridis", vmin=vmin, vmax=vmax,
             )
-            axes[row, col].set_title(title)
+            if row == 0:
+                axes[row, col].set_title(column_titles[col])
             axes[row, col].set_xlabel("x")
-            axes[row, col].set_ylabel("y")
+            axes[row, col].set_ylabel(f"{row_label}\ny" if col == 0 else "y")
             fig.colorbar(im, ax=axes[row, col], shrink=0.85, label="slowness")
 
         im_std = axes[row, 2].imshow(
             _as_image(std, grid), origin="lower", extent=extent,
             cmap="magma", vmin=std_vmin, vmax=std_vmax,
         )
-        axes[row, 2].set_title(f"{prefix}: posterior std")
+        if row == 0:
+            axes[row, 2].set_title(column_titles[2])
         axes[row, 2].set_xlabel("x")
         axes[row, 2].set_ylabel("y")
         fig.colorbar(im_std, ax=axes[row, 2], shrink=0.85, label="posterior std")
 
-    fig.suptitle(
-        "Posterior std is identical for both rows -- C_post does not depend on s_true",
-        fontsize=11,
-    )
+    fig.suptitle("Experiment III: fixed-truth reconstructions", fontsize=12)
 
     if save_path is not None:
-        fig.savefig(save_path, dpi=150)
+        fig.savefig(save_path)
 
     return fig
 
 
+def _grouped_log_bars(ax, components: dict, cases: list[str], quantities: list[str],
+                       labels: list[str], colors, title: str) -> None:
+    """Shared grouped-bar-with-value-labels helper for one panel of
+    `plot_q_decomposition`."""
+    x = np.arange(len(quantities))
+    width = 0.8 / len(cases)
+    for i, case in enumerate(cases):
+        values = [components[case][q] for q in quantities]
+        bars = ax.bar(x + i * width, values, width, label=case, color=colors[i])
+        # Numeric value labels above every bar: on a log axis spanning
+        # several orders of magnitude, a small term (e.g. the smooth-truth
+        # bias, ~0.28) would otherwise be visually indistinguishable from
+        # zero.
+        ax.bar_label(bars, labels=[f"{v:.3g}" for v in values], fontsize=8, padding=3)
+
+    ax.set_yscale("log")
+    ax.set_xticks(x + width * (len(cases) - 1) / 2)
+    ax.set_xticklabels(labels)
+    ax.set_ylabel("value (log scale)")
+    ax.set_title(title)
+    ax.set_ylim(top=ax.get_ylim()[1] * 4)  # headroom for the top value labels
+    ax.legend(frameon=False)
+
+
 def plot_q_decomposition(components: dict, save_path: str | None = None) -> plt.Figure:
     """Fixed-truth `E[Q] = tr(C_post^-1 V_post) + b^T C_post^-1 b`
-    decomposition: grouped bars per case (e.g. "smooth", "sharp") showing
-    the trace (noise) term, the bias term, the theoretical total, and the
-    empirical mean `Q`, on a log scale (the smooth/sharp cases differ by
-    several orders of magnitude in this project's frozen baselines).
+    decomposition, split into two panels: "Components" (the trace/noise term
+    and the bias term) and "Total E[Q]" (the theoretical sum and the
+    empirical mean `Q`), grouped by case (e.g. "smooth", "sharp"), each on
+    its own log y-axis with numeric value labels on every bar (the
+    smooth/sharp cases differ by several orders of magnitude in this
+    project's frozen baselines).
 
     `components` maps each case name to a dict with keys "trace", "bias",
     "theory", "empirical" (see `ARCHITECTURE.md`'s fixed-truth `E[Q]`
@@ -380,33 +435,31 @@ def plot_q_decomposition(components: dict, save_path: str | None = None) -> plt.
     already-computed values).
     """
     cases = list(components.keys())
-    quantities = ["trace", "bias", "theory", "empirical"]
-    labels = ["trace term\ntr(C_post^-1 V_post)", "bias term\nb^T C_post^-1 b",
-              "theoretical E[Q]", "empirical mean Q"]
-
-    fig, ax = plt.subplots(figsize=(8, 5), constrained_layout=True)
-    x = np.arange(len(quantities))
-    width = 0.8 / len(cases)
     colors = plt.get_cmap("viridis")(np.linspace(0.2, 0.8, len(cases)))
 
-    for i, case in enumerate(cases):
-        values = [components[case][q] for q in quantities]
-        bars = ax.bar(x + i * width, values, width, label=case, color=colors[i])
-        # Numeric value labels above every bar: on a log axis spanning
-        # ~10^0 to ~10^7, the smooth-truth bias term (~0.28) would otherwise
-        # be visually indistinguishable from zero.
-        ax.bar_label(bars, labels=[f"{v:.3g}" for v in values], fontsize=8, padding=3)
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5), constrained_layout=True)
 
-    ax.set_yscale("log")
-    ax.set_xticks(x + width * (len(cases) - 1) / 2)
-    ax.set_xticklabels(labels)
-    ax.set_ylabel("value (log scale)")
-    ax.set_title("Experiment III: fixed-truth E[Q] decomposition")
-    ax.set_ylim(top=ax.get_ylim()[1] * 4)  # headroom for the top value labels
-    ax.legend(frameon=False)
+    _grouped_log_bars(
+        axes[0], components, cases,
+        quantities=["trace", "bias"],
+        labels=["trace term\ntr(C_post^-1 V_post)", "bias term\nb^T C_post^-1 b"],
+        colors=colors, title="Components",
+    )
+    _grouped_log_bars(
+        axes[1], components, cases,
+        quantities=["theory", "empirical"],
+        labels=["theoretical E[Q]", "empirical mean Q"],
+        colors=colors, title="Total E[Q]",
+    )
+
+    fig.suptitle(
+        "Experiment III: decomposition of expected Q\n"
+        "Left panel's trace + bias terms sum to the right panel's theoretical E[Q]",
+        fontsize=11,
+    )
 
     if save_path is not None:
-        fig.savefig(save_path, dpi=150)
+        fig.savefig(save_path)
 
     return fig
 
@@ -421,28 +474,26 @@ def plot_boundary_interior_coverage(
     boundary vs. interior checkerboard cells, at each nominal alpha level
     (see `ARCHITECTURE.md`'s boundary/interior investigation -- this
     function only plots the already-established, already-documented
-    numbers; it does not extend that investigation).
+    numbers; it does not extend that investigation). The title is
+    deliberately a neutral label, not a finding -- the investigation's
+    conclusion (what was checked, and that none of it explains the gap)
+    belongs in `README.md`'s caption for this figure, not on the image.
     """
     nominal = [1.0 - a for a in alphas]
 
-    fig, ax = plt.subplots(figsize=(7, 6.3), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=(6, 5.5), constrained_layout=True)
     ax.plot([0, 1], [0, 1], color="gray", linestyle="--", linewidth=1, label="perfect calibration")
     ax.plot(nominal, boundary_coverage, marker="o", color="darkorange", label="boundary cells")
     ax.plot(nominal, interior_coverage, marker="s", color="steelblue", label="interior cells")
     ax.set_xlabel("nominal coverage (1 - alpha)")
     ax.set_ylabel("empirical coverage")
-    ax.set_title(
-        "Experiment III (sharp, block_size=4): boundary vs. interior coverage\n"
-        "Ray density, posterior variance, and bias/noise ratios checked --\n"
-        "none explains this gap",
-        fontsize=10,
-    )
+    ax.set_title("Experiment III: spatial coverage for the sharp truth")
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     ax.set_aspect("equal")
     ax.legend(frameon=False, loc="upper left")
 
     if save_path is not None:
-        fig.savefig(save_path, dpi=150)
+        fig.savefig(save_path)
 
     return fig
