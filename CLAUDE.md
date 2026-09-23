@@ -6,8 +6,10 @@ This project implements and validates a finite-dimensional Bayesian linear-Gauss
 travel-time tomography model, as a small, well-tested Python research-software
 package. The scientific content is fully specified in `experiment.pdf`:
 Experiment I (construction/validation), Experiment II (correctly-specified
-Bayesian calibration), and Experiment III (fixed-truth coverage, under both a
-truth well matched to the prior and a truth deliberately mismatched with it).
+Bayesian calibration), Experiment III (fixed-truth coverage, under both a
+truth well matched to the prior and a truth deliberately mismatched with it),
+and Experiment IV (fixed-truth reconstruction and posterior-uncertainty
+comparison across three predetermined acquisition geometries).
 This document records the *software* structure, module contracts, and
 conventions actually used to build it, and is the reference for any further
 work on this codebase.
@@ -217,16 +219,24 @@ closed-form posterior. Do not introduce: iterative optimization, MCMC, neural
 networks or neural-operator surrogates, curved-ray or nonlinear eikonal solvers, or
 external tomography frameworks (e.g. SimPEG).
 
-The project's scope is also limited to Experiments I-III. A systematic
-acquisition-geometry sweep, a controlled prior-misspecification experiment (varying
-the correlation length used to generate the truth against the one used for
-inference), and a controlled noise-misspecification experiment (varying the true
-versus assumed noise level) are not part of this project. The fixed-truth
+The project's scope is Experiments I-IV. A controlled prior-misspecification
+experiment (varying the correlation length used to generate the truth against the
+one used for inference) and a controlled noise-misspecification experiment (varying
+the true versus assumed noise level) are not part of this project. The fixed-truth
 comparison in Experiment III already demonstrates the central phenomenon those
 experiments would also illustrate — a well-defined posterior failing to describe
 physical uncertainty under model mismatch — via a mismatched truth rather than a
-mismatched prior or noise model. If a task seems to call for any of the above, stop
-and flag it rather than implementing it.
+mismatched prior or noise model.
+
+Experiment IV compares three *predetermined* acquisition geometries (uniform, and
+two boundary-clustered layouts at fixed gamma=0.70 and gamma=0.40) at a fixed ray
+count (`Ns=Nr=16`, `m=256`). It is not a systematic acquisition-geometry sweep, not
+a continuous or gradient-based sensor-placement optimizer, and not a claim of an
+optimal or globally best geometry — those remain out of scope. Do not add:
+additional gamma values, asymmetric or randomized layouts, any optimizer over
+sensor position (genetic, gradient-based, or random-restart), additional
+acquisition densities, or additional grid resolutions for Experiment IV. If a task
+seems to call for any of the above, stop and flag it rather than implementing it.
 
 ## Testing requirements
 
@@ -290,12 +300,25 @@ before the next was built on top of it — several real issues, documented in
 8. Experiment III (fixed truth, both smooth and sharp), including a follow-up
    diagnostic investigation into an observed boundary/interior coverage effect
    (see `ARCHITECTURE.md`).
+9. Experiment IV (fixed-truth reconstruction and posterior-uncertainty comparison
+   across three predetermined acquisition geometries — uniform, mild boundary
+   clustering, strong boundary clustering — at `m=256`, reusing Experiment III's
+   smooth truth). **NOT YET IMPLEMENTED as of this writing**: its specification
+   and already-validated reference numbers are recorded in `experiment.pdf`. The
+   repo layout and testing-requirements sections below describe the codebase as
+   it stood through Experiment III and have not yet been updated for Experiment
+   IV's new files — do not treat their silence on Experiment IV as evidence it
+   doesn't exist or isn't authorized; once implemented, sync those sections in
+   the same pass rather than leaving this file stale.
 
-This is the complete set of experiments for this project (see "Out of scope"
-above). The only work remaining is assembling `notebooks/report.ipynb` — a
-presentation task drawing on the curated `figures/` outputs and the frozen
-`results/baselines/` reference results, not a new experiment, and it should not
-introduce any numerical result beyond what those frozen baselines already contain.
+This is the complete planned set of experiments for this project (see "Out of
+scope" above, which also governs what Experiment IV itself may and may not grow
+into). Beyond implementing Experiment IV and then syncing the repo layout and
+testing-requirements sections to match, the only other work remaining is
+assembling `notebooks/report.ipynb` — a presentation task drawing on the curated
+`figures/` outputs and the frozen `results/baselines/` reference results, not a
+new experiment, and it should not introduce any numerical result beyond what
+those frozen baselines already contain.
 
 ## Documentation requirement: `ARCHITECTURE.md`
 
