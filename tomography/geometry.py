@@ -85,6 +85,46 @@ def make_sources_receivers(
     return sources, receivers
 
 
+def make_boundary_clustered_sources_receivers(
+    W: float, N: int, gamma: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """Place `N` sources (`x=0`) and `N` receivers (`x=W`) using a symmetric,
+    deterministic warp of `make_sources_receivers`'s uniform spacing,
+    parameterized by `gamma`:
+
+        u = linspace(0, 1, N + 2)[1:-1]                     (base uniform convention)
+        u' = 0.5 + 0.5 * sign(u - 0.5) * (2 * |u - 0.5|) ** gamma
+        y = W * u'
+
+    `gamma = 1.0` recovers `make_sources_receivers(W, N, N)`'s uniform
+    spacing *exactly* (`u' = u` identically, since `sign(d) * 2|d| = 2d` for
+    any real `d`) -- it is not a separate special case, just this same
+    formula evaluated at `gamma=1`. `gamma < 1` clusters sensors toward the
+    two boundaries, more strongly as `gamma` decreases toward 0; `gamma` is
+    otherwise unconstrained here.
+
+    Sources and receivers use the identical resulting normalized layout.
+    Used by Experiment IV to construct its three predetermined acquisition
+    geometries (uniform: `gamma=1.0`; mild boundary clustering:
+    `gamma=0.70`; strong boundary clustering: `gamma=0.40`) -- a fixed,
+    non-optimized parameterization for a specific comparison, not a general
+    sensor-placement design tool (see `CLAUDE.md`'s "Out of scope" section).
+    """
+    if N <= 0:
+        raise ValueError(f"N must be positive, got {N}")
+    if not (0.0 < gamma <= 1.0):
+        raise ValueError(f"gamma must be in (0, 1], got {gamma}")
+
+    u = np.linspace(0.0, 1.0, N + 2)[1:-1]
+    d = u - 0.5
+    u_prime = 0.5 + 0.5 * np.sign(d) * (2.0 * np.abs(d)) ** gamma
+    y = W * u_prime
+
+    sources = np.stack([np.zeros(N), y], axis=1)
+    receivers = np.stack([np.full(N, W), y], axis=1)
+    return sources, receivers
+
+
 def _cell_index(x: float, y: float, grid: Grid) -> int:
     """Map a point to a flat cell index per the half-open ownership rule."""
     j = int(np.clip(np.floor(x / grid.h), 0, grid.n - 1))

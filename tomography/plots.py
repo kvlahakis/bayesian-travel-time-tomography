@@ -497,3 +497,62 @@ def plot_boundary_interior_coverage(
         fig.savefig(save_path)
 
     return fig
+
+
+def plot_geometry_reconstruction_comparison(
+    e_rel_by_geometry: dict, save_path: str | None = None
+) -> plt.Figure:
+    """Experiment IV, figure A: distribution of `E_rel` for each predetermined
+    acquisition geometry (a box plot -- median and interquartile spread are
+    marked; individual outlier points are suppressed for legibility, not to
+    imply a cleaner distribution than the data has). `e_rel_by_geometry` maps
+    geometry name to its pooled `E_rel` array (all seeds/repetitions).
+
+    This plots the distributions as computed; it does not test or imply
+    statistical significance of any difference between them.
+    """
+    names = list(e_rel_by_geometry.keys())
+    data = [e_rel_by_geometry[name] for name in names]
+
+    fig, ax = plt.subplots(figsize=(7, 5), constrained_layout=True)
+    ax.boxplot(data, tick_labels=names, showfliers=False)
+    for i, e in enumerate(data, start=1):
+        ax.scatter([i], [e.mean()], color="crimson", marker="D", s=25, zorder=3,
+                   label="mean" if i == 1 else None)
+    ax.set_ylabel("E_rel")
+    ax.set_title("Experiment IV: reconstruction error by acquisition geometry")
+    ax.legend(frameon=False, loc="upper right", fontsize=9)
+
+    if save_path is not None:
+        fig.savefig(save_path)
+
+    return fig
+
+
+def plot_geometry_seed_robustness(
+    seeds: list[int], seed_level_deltas: dict, save_path: str | None = None
+) -> plt.Figure:
+    """Experiment IV, figure B: seed-level mean `Delta_E_rel` (geometry minus
+    uniform) for each of the independent master seeds, with a horizontal
+    zero reference. Each point is one master seed's mean over its
+    repetitions (see the seed count / repetitions-per-seed in the caption);
+    `seed_level_deltas` maps comparison name (e.g. "mild_boundary_minus_uniform")
+    to its `(n_seeds,)` array of seed-level means.
+    """
+    fig, ax = plt.subplots(figsize=(8, 5), constrained_layout=True)
+    x = np.arange(len(seeds))
+    markers = ["o", "s", "^", "v", "D"]
+    for i, (name, vals) in enumerate(seed_level_deltas.items()):
+        ax.plot(x, vals, marker=markers[i % len(markers)], label=name)
+    ax.axhline(0, color="black", linestyle="--", linewidth=1)
+    ax.set_xticks(x)
+    ax.set_xticklabels([str(s) for s in seeds], rotation=45)
+    ax.set_xlabel("master seed")
+    ax.set_ylabel("seed-level mean Delta E_rel")
+    ax.set_title("Experiment IV: seed-level robustness of Delta E_rel")
+    ax.legend(frameon=False, fontsize=9)
+
+    if save_path is not None:
+        fig.savefig(save_path)
+
+    return fig

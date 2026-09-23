@@ -1,0 +1,43 @@
+# Experiment IV: predetermined acquisition-geometry comparison.
+#
+# Compares three predetermined source/receiver layouts -- uniform
+# (gamma=1.0), mild boundary clustering (gamma=0.70), and strong boundary
+# clustering (gamma=0.40) -- at fixed grid resolution, ray count, prior,
+# noise level, and Experiment III's smooth fixed truth. This is NOT a
+# sensor-placement optimizer or a systematic acquisition-geometry sweep --
+# see CLAUDE.md's "Out of scope" section.
+#
+# This 10-seed x 200-repeat protocol is the PERMANENT Monte Carlo protocol
+# for Experiment IV (2000 paired realizations total). It is a separate
+# acquisition (Ns=Nr=16, m=256) from Experiment III's frozen smooth/sharp
+# baselines (Ns=Nr=12, m=144) -- this is not a reproduction of those
+# baselines, but an independent fixed-truth acquisition-geometry experiment
+# reusing the same smooth truth. A historical single-seed (seed=12345,
+# 1000-repeat) validation reference exists separately (see
+# results/baselines/ and test_experiment_iv.py) but is not the primary
+# protocol.
+
+grid:
+  W: 10.0
+  n: 20
+
+Ns: 16
+Nr: 16
+
+tau2: 0.04
+ell: 2.0
+s_bg: 1.0
+jitter_relative: 1.0e-6
+
+sigma: 0.02
+
+n_repeats_per_seed: 200
+seeds: [12345, 22345, 32345, 42345, 52345, 62345, 72345, 82345, 92345, 102345]
+
+geometries:
+  - name: uniform
+    gamma: 1.0
+  - name: mild_boundary
+    gamma: 0.70
+  - name: strong_boundary
+    gamma: 0.40

@@ -7,9 +7,10 @@ straight-ray line integrals, and the resulting linear-Gaussian posterior is
 computed in closed form (no MCMC, no iterative optimization).
 
 The full scientific specification — problem statement, prior/likelihood model,
-and the three experiments (construction/validation, correctly-specified
-Bayesian calibration, and fixed-truth coverage under a well-matched and a
-mismatched truth) — is in `experiment.pdf`.
+and the four experiments (construction/validation, correctly-specified
+Bayesian calibration, fixed-truth coverage under a well-matched and a
+mismatched truth, and a predetermined acquisition-geometry comparison) — is in
+`experiment.pdf`.
 
 **Headline result:** under the correctly specified generative model
 (Experiment II), the posterior is exactly calibrated — `Q ~ chi2(n_cells)`, confirmed
@@ -31,6 +32,12 @@ description of physical uncertainty, is the project's central finding.
   governs coverage, with an identically well-defined posterior in both cases.
 - The analytical `E[Q]` decomposition identifies deterministic bias — not
   observation noise — as the mechanism behind the sharp truth's inflated `Q`.
+- Experiment IV evaluates the effect of predetermined acquisition geometry on
+  Bayesian reconstruction. Uniform, mildly boundary-clustered, and strongly
+  boundary-clustered source/receiver layouts are compared at fixed grid
+  resolution, ray count, prior, truth, and noise level. Posterior covariance
+  metrics are paired with repeated-noise reconstruction experiments, including
+  an independent-seed robustness check.
 
 ## Model
 
@@ -63,8 +70,9 @@ implementation.
 
 Complete. The project implements and validates Experiment I
 (construction/validation), Experiment II (correctly specified Bayesian
-calibration), and Experiment III (fixed-truth coverage, both a smooth and a
-sharp truth), plus a follow-up diagnostic investigation into an observed
+calibration), Experiment III (fixed-truth coverage, both a smooth and a
+sharp truth), and Experiment IV (predetermined acquisition-geometry
+comparison), plus a follow-up diagnostic investigation into an observed
 coverage effect in Experiment III (see `ARCHITECTURE.md`). The package
 (`geometry.py`, `forward.py`, `prior.py`, `inversion.py`, `diagnostics.py`,
 `experiments.py`, `plots.py`, `config.py`) and its test suite are fully
@@ -82,6 +90,9 @@ scripts/run_experiment.py configs/calibration_correct.yaml --experiment correctl
 # Experiment III: fixed-truth coverage (smooth or sharp)
 scripts/run_experiment.py configs/calibration_fixed_truth.yaml --experiment fixed_truth_smooth
 scripts/run_experiment.py configs/calibration_fixed_truth.yaml --experiment fixed_truth_sharp
+
+# Experiment IV: predetermined acquisition-geometry comparison
+scripts/run_experiment_iv.py configs/experiment_iv.yaml --plot
 ```
 
 The `n=20`, `N=1000`, `seed=12345` run under `results/baselines/` (files
@@ -98,11 +109,27 @@ results for Experiment III's smooth-vs-sharp fixed-truth comparison. They
 should not be overwritten by a run with a different seed, truth, or
 configuration without also updating this note.
 
+Likewise, `experiment_IV_baseline_n20_Ns16Nr16_10seeds_200reps.npz` under
+`results/baselines/` (config
+`experiment_IV_baseline_config_n20_Ns16Nr16_10seeds_200reps.yaml`, identical
+to `configs/experiment_iv.yaml`) is the validated, frozen reference result for
+Experiment IV's 10-master-seed x 200-repeat protocol (2000 paired
+realizations total). Note this uses a different acquisition than Experiment
+III's frozen baselines — `Ns = Nr = 16` (`m = 256` rays) here, versus
+`Ns = Nr = 12` (`m = 144` rays) for Experiment III — so Experiment IV is not a
+reproduction of the Experiment III baseline at a different geometry, but a
+separate experiment reusing Experiment III's smooth fixed truth. It should not
+be overwritten by a run with a different seed, geometry set, or configuration
+without also updating this note.
+
 ## Scope
 
 This project is deliberately limited to a finite-dimensional, closed-form
-linear-Gaussian model. It does not include a systematic acquisition-geometry
-sweep, a controlled prior-misspecification experiment, or a controlled
+linear-Gaussian model. Experiment IV compares exactly three predetermined
+acquisition geometries (uniform and two boundary-clustered layouts) — it is
+not a systematic acquisition-geometry sweep, and no optimizer, additional
+gamma values, or asymmetric layouts are part of it. The project also does not
+include a controlled prior-misspecification experiment or a controlled
 noise-misspecification experiment — the fixed-truth comparison in Experiment
 III already demonstrates the same central phenomenon (a well-defined posterior
 failing to describe physical uncertainty under model mismatch) via a
@@ -160,6 +187,20 @@ sequence):
    and none explains the boundary/interior coverage gap shown here; the
    effect may arise from higher-order spatial structure not captured by
    these diagnostics (see `ARCHITECTURE.md`).
+
+**Experiment IV** (predetermined acquisition-geometry comparison; a separate
+experiment from 1-7 above, at a different acquisition than Experiment III's
+frozen baselines — see "Status"):
+
+8. `figure_8_experiment_IV_geometry_comparison.png` — pooled `E_rel`
+   distribution (all seeds and repetitions) for each of the three
+   geometries, with the mean marked. Plotted as computed; no statistical
+   significance is tested or implied.
+9. `figure_9_experiment_IV_seed_robustness.png` — seed-level mean
+   `Delta_E_rel` (geometry minus uniform) for each of the 10 independent
+   master seeds, for both boundary-clustered geometries, with a zero
+   reference line. Each point is one master seed's mean over its 200
+   repetitions — independent master seeds, not independent single draws.
 
 ## Development
 

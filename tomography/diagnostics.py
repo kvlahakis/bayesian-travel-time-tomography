@@ -21,6 +21,16 @@ from scipy.linalg import cho_factor, cho_solve
 from scipy.stats import norm
 
 
+def pearson_correlation(s_post: np.ndarray, s_true: np.ndarray) -> float:
+    """Pearson correlation between the posterior mean and the truth, across
+    cells. A reconstruction-quality diagnostic distinct from
+    `relative_error`: invariant to a uniform rescaling/offset of `s_post`,
+    so it measures whether the reconstruction captures the truth's spatial
+    *pattern* rather than its exact magnitude.
+    """
+    return float(np.corrcoef(s_post, s_true)[0, 1])
+
+
 def relative_error(s_post: np.ndarray, s_true: np.ndarray) -> float:
     """Relative L2 reconstruction error, ||s_post - s_true|| / ||s_true||."""
     return float(np.linalg.norm(s_post - s_true) / np.linalg.norm(s_true))
@@ -140,3 +150,50 @@ def fixed_truth_expected_Q(
     bias_term = float(b @ cho_solve(C_post_factor, b))
 
     return {"trace": trace_term, "bias": bias_term, "theory": trace_term + bias_term}
+
+
+def posterior_information_metrics(A: np.ndarray, Cs: np.ndarray, sigma2: float) -> dict:
+    """Posterior-information-content diagnostics for a given acquisition
+    matrix `A` and prior/noise (`Cs`, `sigma2`) -- independent of any
+    particular truth or noise realization, since none of these quantities
+    depend on the data. Used by Experiment IV to compare predetermined
+    acquisition geometries (see `ARCHITECTURE.md`).
+
+    Returns a dict with:
+
+    - ``"J_var"``: mean posterior variance, `tr(C_post) / p`;
+    - ``"J_logdet"``: `-log(det(P))` where `P = A^T A / sigma2 + Cs^-1`,
+      computed from `P`'s own Cholesky factor `L` (`P = L L^T`) as
+      `-2 * sum(log(diag(L)))`, never from `det(P)` directly;
+    - ``"rank"``: numerical rank of `A` via `numpy.linalg.matrix_rank`'s
+      standard documented default tolerance (`sigma_max * max(m, p) *
+      eps(float64)`) -- no project-specific rank-tolerance convention
+      exists elsewhere in this codebase;
+    - ``"r_eff"``: effective rank `(sum_i sigma_i^2)^2 / sum_i sigma_i^4`
+      from `A`'s singular values -- an energy-weighted diagnostic quantity,
+      explicitly distinct from the numerical rank above (see
+      `ARCHITECTURE.md`'s Experiment IV section for why the two can diverge
+      substantially);
+    - ``"C_post"``: the posterior covariance itself (`P`'s inverse, obtained
+      via Cholesky solves, never an explicit matrix inverse), so callers
+      needing `sqrt(diag(C_post))` do not need to recompute it.
+    """
+    p = A.shape[1]
+    Cs_factor = cho_factor(Cs, lower=True)
+    Cs_inv = cho_solve(Cs_factor, np.eye(p))
+    P = (A.T @ A) / sigma2 + Cs_inv
+
+    P_factor = cho_factor(P, lower=True)
+    C_post = cho_solve(P_factor, np.eye(p))
+    J_var = float(np.trace(C_post) / p)
+
+    L = np.linalg.cholesky(P)
+    J_logdet = float(-2.0 * np.sum(np.log(np.diag(L))))
+
+    S = np.linalg.svd(A, compute_uv=False)
+    tol = S.max() * max(A.shape) * np.finfo(np.float64).eps
+    rank = int(np.sum(S > tol))
+    energy = S**2
+    r_eff = float((energy.sum()) ** 2 / np.sum(energy**2))
+
+    return {"J_var": J_var, "J_logdet": J_logdet, "rank": rank, "r_eff": r_eff, "C_post": C_post}

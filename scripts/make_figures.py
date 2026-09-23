@@ -23,7 +23,9 @@ from tomography.plots import (
     plot_boundary_interior_coverage,
     plot_calibration_summary,
     plot_fixed_truth_comparison,
+    plot_geometry_reconstruction_comparison,
     plot_geometry_schematic,
+    plot_geometry_seed_robustness,
     plot_q_decomposition,
     plot_ray_coverage,
     plot_reconstruction_summary,
@@ -151,6 +153,31 @@ def figure_7_boundary_interior_coverage() -> None:
     print("Saved figure_7_boundary_interior_coverage.png")
 
 
+def figure_8_and_9_experiment_IV_geometry_comparison() -> None:
+    # Reads the frozen Experiment IV baseline; never re-runs the experiment.
+    npz = np.load(
+        BASELINES_DIR / "experiment_IV_baseline_n20_Ns16Nr16_10seeds_200reps.npz"
+    )
+    geometry_names = [str(n) for n in npz["geometry_names"]]
+    paired_names = [str(n) for n in npz["paired_comparison_names"]]
+    seeds = list(npz["seeds"])
+
+    e_rel_by_geometry = {name: npz[f"{name}__e_rel"] for name in geometry_names}
+    plot_geometry_reconstruction_comparison(
+        e_rel_by_geometry,
+        save_path=str(FIGURES_DIR / "figure_8_experiment_IV_geometry_comparison.png"),
+    )
+
+    seed_level_deltas = {
+        name: npz[f"{name}__seed_level_mean_delta_e_rel"] for name in paired_names
+    }
+    plot_geometry_seed_robustness(
+        seeds, seed_level_deltas,
+        save_path=str(FIGURES_DIR / "figure_9_experiment_IV_seed_robustness.png"),
+    )
+    print("Saved figure_8_experiment_IV_geometry_comparison.png, figure_9_experiment_IV_seed_robustness.png")
+
+
 def main() -> None:
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     figure_1_and_2_geometry_and_ray_coverage()
@@ -159,6 +186,7 @@ def main() -> None:
     figure_5_experiment_III_fixed_truth()
     figure_6_fixed_truth_Q_decomposition()
     figure_7_boundary_interior_coverage()
+    figure_8_and_9_experiment_IV_geometry_comparison()
 
 
 if __name__ == "__main__":

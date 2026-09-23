@@ -36,8 +36,12 @@
 - `diagnostics.py` depends on `inversion.py`'s outputs (`s_post`, `C_post`) and
   a ground truth from `forward.py`.
 - `experiments.py` wires `geometry`, `forward`, `prior`, `inversion`, and
-  `diagnostics` together into Experiments I-III, using `config.py` for
-  reproducible parameterization.
+  `diagnostics` together into Experiments I-IV, using `config.py` for
+  reproducible parameterization. Experiment IV additionally uses
+  `geometry.make_boundary_clustered_sources_receivers` (predetermined
+  acquisition layouts) and `diagnostics.posterior_information_metrics` /
+  `diagnostics.pearson_correlation` (geometry-comparison diagnostics) -- see
+  "Experiment IV" below.
 - `plots.py` consumes `experiments.py` outputs and produces figures.
 - `scripts/run_experiment.py` and `notebooks/report.ipynb` are thin consumers
   at the top of the chain: YAML config in, `experiments.py` + `plots.py` out.
@@ -291,6 +295,55 @@ eigenmode analysis, no additional block sizes, no alternative acquisition
 geometries were pursued. This is treated as a valid, deliberate stopping
 point for this project, not an unfinished result.
 
+## Experiment IV: predetermined acquisition-geometry comparison
+
+Holding the grid (`n=20`), ray count (`Ns=Nr=16`, `m=256`), prior
+(`tau2=0.04`, `ell=2.0`), noise level (`sigma=0.02`), and Experiment III's
+smooth fixed truth all constant, Experiment IV compares exactly three
+predetermined source/receiver layouts built by
+`geometry.make_boundary_clustered_sources_receivers`: uniform (`gamma=1.0`,
+recovering `make_sources_receivers` exactly), mild boundary clustering
+(`gamma=0.70`), and strong boundary clustering (`gamma=0.40`). This is a
+comparison among predetermined designs, not a search for an optimal one --
+see `CLAUDE.md`'s and the README's "Scope" sections for the explicit
+boundary, and `configs/experiment_iv.yaml` for the frozen parameterization.
+
+**Geometry-only diagnostics** (`diagnostics.posterior_information_metrics`;
+depend only on `A`, `Cs`, and `sigma` -- never on a truth or noise
+realization, so these are exact, not statistical estimates): boundary
+clustering reduces mean posterior variance (`J_var`: `8.781e-3` uniform ->
+`8.505e-3` mild -> `8.342e-3` strong) without increasing the raw numerical
+rank of `A` (`255 -> 256 -> 244`); the *effective* rank (`r_eff`, an
+energy-weighted diagnostic distinct from numerical rank) actually decreases
+substantially (`56.96 -> 52.97 -> 36.43`). Boundary clustering redistributes
+where ray density falls rather than adding independent measurements -- lower
+posterior variance here does not come from more independent information.
+
+**Paired reconstruction Monte Carlo**
+(`experiments.run_acquisition_geometry_comparison`): for each of 10
+independent master seeds (200 repetitions each, 2000 realizations total),
+one shared standardized noise draw per repetition is applied identically to
+every geometry, isolating the effect of geometry from noise-realization
+variance. Reconstruction quality is measured with `diagnostics.relative_error`
+(`E_rel = ||s_post - s_true|| / ||s_true||`) and `diagnostics.pearson_correlation`
+called directly -- never a hand-derived formula, and in particular never an
+`||s_true - s0||`-normalized variant, which is not this codebase's
+`relative_error` convention. Pooled over all 2000 realizations, mean `E_rel`
+is `0.0291` (uniform), `0.0279` (mild), `0.0270` (strong); mean correlation
+improves in the same direction. Paired mean `Delta_E_rel` (geometry minus
+uniform) is negative for both boundary geometries (`-0.00121` mild,
+`-0.00209` strong), and this direction is robust at the seed level: 9 of 10
+master seeds for mild boundary clustering, and 10 of 10 for strong boundary
+clustering, have a negative seed-level mean `Delta_E_rel`.
+
+**Limitation.** Only these three predetermined layouts were tested. This
+establishes that boundary clustering, at these two specific `gamma` values
+and this specific ray count, modestly improves fixed-truth reconstruction and
+reduces posterior variance without increasing raw rank -- it does not
+establish that boundary clustering is beneficial in general, at other
+`gamma` values, ray counts, resolutions, or truths, nor does it identify a
+best or optimal layout (see "Out of scope" below).
+
 ## Out of scope
 
 This is deliberately a finite-dimensional linear-Gaussian problem with an exact
@@ -299,11 +352,14 @@ iterative optimization, MCMC, neural networks or neural-operator surrogates,
 curved-ray or nonlinear eikonal solvers, and external tomography frameworks
 (e.g. SimPEG).
 
-The project's scope is also limited to Experiments I-III: a systematic
-acquisition-geometry sweep, a controlled prior-misspecification experiment,
-and a controlled noise-misspecification experiment are not part of this
-project. The fixed-truth comparison in Experiment III (see above) already
-demonstrates the central phenomenon those experiments would also
-illustrate — a well-defined posterior failing to describe physical
+The project's scope is also limited to Experiments I-IV as implemented.
+Experiment IV itself is limited to the three predetermined geometries fixed
+in `configs/experiment_iv.yaml` -- it is not a systematic
+acquisition-geometry sweep, and no optimizer, additional `gamma` values, or
+asymmetric layouts are part of it. A controlled prior-misspecification
+experiment and a controlled noise-misspecification experiment are likewise
+not part of this project. The fixed-truth comparison in Experiment III (see
+above) already demonstrates the central phenomenon those experiments would
+also illustrate — a well-defined posterior failing to describe physical
 uncertainty under model mismatch — via a mismatched truth rather than a
 mismatched prior or noise model.

@@ -1,4 +1,4 @@
-"""Single-run and repeated-run experiment harnesses for Experiments I-III.
+"""Single-run and repeated-run experiment harnesses for Experiments I-IV.
 
 Experiment I (construction/validation) is implemented here as
 `run_construction_validation`. It predates `diagnostics.py` and any
@@ -25,11 +25,20 @@ across realizations (truth and noise, vs. noise alone), so they share a
 common per-realization-diagnostics-and-stacking helper,
 `_run_repeated_from_draws`.
 
-This is the complete set of experiments for this project (see `CLAUDE.md`'s
-"Out of scope" section): a systematic acquisition-geometry sweep, a
-controlled prior-misspecification experiment, and a controlled
-noise-misspecification experiment are deliberately not part of this project,
-not future work to be added here.
+Experiment IV (`run_acquisition_geometry_comparison`) compares reconstruction
+and posterior-uncertainty metrics across a small, fixed set of predetermined
+acquisition geometries (see `geometry.make_boundary_clustered_sources_receivers`),
+using a *paired* Monte Carlo design: one shared standardized noise draw per
+repetition, applied identically to every geometry, so per-repetition
+differences isolate the effect of geometry from noise-realization variance.
+It reuses Experiment III's smooth fixed truth. This is not a systematic
+acquisition-geometry sweep or a sensor-placement optimizer -- the set of
+geometries compared is fixed by the caller's config (see `CLAUDE.md`'s "Out
+of scope" section for the explicit boundary).
+
+A controlled prior-misspecification experiment and a controlled
+noise-misspecification experiment remain deliberately out of this project's
+scope (see `CLAUDE.md`), not future work to be added here.
 """
 
 from __future__ import annotations
@@ -38,16 +47,25 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .config import ExperimentConfig
+from .config import ExperimentConfig, ExperimentIVConfig
 from .diagnostics import (
     empirical_coverage,
     mahalanobis,
     marginal_coverage,
+    pearson_correlation,
+    posterior_information_metrics,
     relative_error,
     standardized_errors,
 )
 from .forward import add_noise, forward, synthetic_truth_gaussian_anomaly
-from .geometry import Grid, build_sensitivity_matrix, check_row_sums, make_grid, make_sources_receivers
+from .geometry import (
+    Grid,
+    build_sensitivity_matrix,
+    check_row_sums,
+    make_boundary_clustered_sources_receivers,
+    make_grid,
+    make_sources_receivers,
+)
 from .inversion import posterior_isotropic
 from .prior import sample_prior, squared_exponential_cov
 
@@ -424,3 +442,185 @@ def run_fixed_truth(
         return s_true, s_post, C_post
 
     return _run_repeated_from_draws(n_repeats, A.shape[1], draw_realization, alphas)
+
+
+@dataclass
+class GeometryDiagnostics:
+    """Experiment IV: per-geometry results, pooled across every seed and
+    repetition (`n_total = len(seeds) * n_repeats_per_seed`).
+    """
+
+    name: str
+    e_rel: np.ndarray  # (n_total,)
+    correlation: np.ndarray  # (n_total,)
+    posterior_std: np.ndarray  # (n_cells,) -- deterministic given this geometry
+    J_var: float
+    J_logdet: float
+    rank: int
+    r_eff: float
+
+
+@dataclass
+class PairedComparison:
+    """Experiment IV: paired-difference results for one geometry relative to
+    the uniform baseline (`geometry - uniform`), both pooled across all
+    seeds/repetitions and broken out per seed.
+    """
+
+    name: str  # e.g. "mild_boundary_minus_uniform"
+    delta_e_rel: np.ndarray  # (n_total,)
+    delta_correlation: np.ndarray  # (n_total,)
+    seed_level_mean_delta_e_rel: np.ndarray  # (n_seeds,)
+    seed_level_std_delta_e_rel: np.ndarray  # (n_seeds,)
+    seed_level_mean_delta_correlation: np.ndarray  # (n_seeds,)
+    seed_level_std_delta_correlation: np.ndarray  # (n_seeds,)
+    seed_level_n_improved_e_rel: np.ndarray  # (n_seeds,) int, count(delta_e_rel < 0)
+    seed_level_frac_improved_e_rel: np.ndarray  # (n_seeds,)
+    seed_level_n_improved_correlation: np.ndarray  # (n_seeds,) int, count(delta_corr > 0)
+    seed_level_frac_improved_correlation: np.ndarray  # (n_seeds,)
+
+
+@dataclass
+class ExperimentIVResults:
+    """Experiment IV: predetermined acquisition-geometry comparison."""
+
+    seeds: list[int]
+    n_repeats_per_seed: int
+    geometries: dict[str, GeometryDiagnostics]  # keyed by geometry name
+    paired_comparisons: dict[str, PairedComparison]  # keyed by non-uniform geometry name
+
+
+def run_acquisition_geometry_comparison(config: ExperimentIVConfig) -> ExperimentIVResults:
+    """Experiment IV: compare fixed-truth reconstruction and
+    posterior-uncertainty metrics across `config.geometries` (predetermined
+    acquisition layouts from `geometry.make_boundary_clustered_sources_receivers`),
+    holding the grid, prior, noise level, and Experiment III's smooth fixed
+    truth constant.
+
+    Paired design: for each of `config.seeds`, a fresh
+    `np.random.default_rng(seed)` draws one length-`m` standardized noise
+    vector per repetition, and that *same* vector (scaled by `config.sigma`)
+    is applied to every geometry -- so per-repetition differences between
+    geometries isolate the effect of geometry, not noise-realization
+    variance. This is not a general acquisition-geometry sweep or an
+    optimizer: `config.geometries` fixes the (small, predetermined) set of
+    layouts compared (see `CLAUDE.md`'s "Out of scope" section).
+
+    Exactly one geometry in `config.geometries` must have `gamma == 1.0`
+    (the uniform baseline); every other geometry's paired comparison is
+    computed against it.
+    """
+    uniform_candidates = [g.name for g in config.geometries if g.gamma == 1.0]
+    if len(uniform_candidates) != 1:
+        raise ValueError(
+            "run_acquisition_geometry_comparison requires exactly one geometry with "
+            f"gamma == 1.0 (the uniform baseline) in config.geometries; found "
+            f"{len(uniform_candidates)}: {uniform_candidates}"
+        )
+    uniform_name = uniform_candidates[0]
+
+    grid = make_grid(config.grid.W, config.grid.n)
+    p = grid.n**2
+    Cs = squared_exponential_cov(
+        grid.cell_centers, tau2=config.tau2, ell=config.ell, jitter_relative=config.jitter_relative
+    )
+    s0 = config.s_bg * np.ones(p)
+    s_true = synthetic_truth_gaussian_anomaly(
+        grid, s_bg=config.s_bg, delta_s=np.sqrt(config.tau2),
+        x0=config.grid.W / 2, y0=config.grid.W / 2, r=config.grid.W / 6,
+    )
+
+    m_expected = config.Ns * config.Nr
+    sigma2 = config.sigma**2
+
+    geometry_A: dict[str, np.ndarray] = {}
+    geometry_t_true: dict[str, np.ndarray] = {}
+    geometry_info: dict[str, dict] = {}
+    for geom in config.geometries:
+        sources, receivers = make_boundary_clustered_sources_receivers(
+            config.grid.W, config.Ns, geom.gamma
+        )
+        A = build_sensitivity_matrix(sources, receivers, grid)
+        assert A.shape[0] == m_expected  # every source connects to every receiver
+        geometry_A[geom.name] = A
+        geometry_t_true[geom.name] = forward(A, s_true)
+        geometry_info[geom.name] = posterior_information_metrics(A, Cs, sigma2)
+
+    n_seeds = len(config.seeds)
+    reps = config.n_repeats_per_seed
+    n_total = n_seeds * reps
+
+    e_rel = {geom.name: np.empty(n_total) for geom in config.geometries}
+    correlation = {geom.name: np.empty(n_total) for geom in config.geometries}
+    seed_slices: list[tuple[int, int, int]] = []  # (seed, start, stop)
+
+    idx = 0
+    for seed in config.seeds:
+        rng = np.random.default_rng(seed)
+        start = idx
+        for _ in range(reps):
+            epsilon = config.sigma * rng.standard_normal(m_expected)
+            for geom in config.geometries:
+                d = geometry_t_true[geom.name] + epsilon
+                s_post, _ = posterior_isotropic(
+                    geometry_A[geom.name], d, sigma2=sigma2, Cs=Cs, s0=s0
+                )
+                e_rel[geom.name][idx] = relative_error(s_post, s_true)
+                correlation[geom.name][idx] = pearson_correlation(s_post, s_true)
+            idx += 1
+        seed_slices.append((seed, start, idx))
+
+    geometries_out = {
+        geom.name: GeometryDiagnostics(
+            name=geom.name,
+            e_rel=e_rel[geom.name],
+            correlation=correlation[geom.name],
+            posterior_std=np.sqrt(np.diag(geometry_info[geom.name]["C_post"])),
+            J_var=geometry_info[geom.name]["J_var"],
+            J_logdet=geometry_info[geom.name]["J_logdet"],
+            rank=geometry_info[geom.name]["rank"],
+            r_eff=geometry_info[geom.name]["r_eff"],
+        )
+        for geom in config.geometries
+    }
+
+    paired_out: dict[str, PairedComparison] = {}
+    for geom in config.geometries:
+        if geom.name == uniform_name:
+            continue
+        delta_e = e_rel[geom.name] - e_rel[uniform_name]
+        delta_c = correlation[geom.name] - correlation[uniform_name]
+
+        seed_mean_e, seed_std_e, seed_n_e, seed_frac_e = [], [], [], []
+        seed_mean_c, seed_std_c, seed_n_c, seed_frac_c = [], [], [], []
+        for _, start, stop in seed_slices:
+            block_e, block_c = delta_e[start:stop], delta_c[start:stop]
+            seed_mean_e.append(block_e.mean())
+            seed_std_e.append(block_e.std())
+            seed_n_e.append(int(np.sum(block_e < 0)))
+            seed_frac_e.append(float(np.mean(block_e < 0)))
+            seed_mean_c.append(block_c.mean())
+            seed_std_c.append(block_c.std())
+            seed_n_c.append(int(np.sum(block_c > 0)))
+            seed_frac_c.append(float(np.mean(block_c > 0)))
+
+        paired_out[geom.name] = PairedComparison(
+            name=f"{geom.name}_minus_{uniform_name}",
+            delta_e_rel=delta_e,
+            delta_correlation=delta_c,
+            seed_level_mean_delta_e_rel=np.array(seed_mean_e),
+            seed_level_std_delta_e_rel=np.array(seed_std_e),
+            seed_level_mean_delta_correlation=np.array(seed_mean_c),
+            seed_level_std_delta_correlation=np.array(seed_std_c),
+            seed_level_n_improved_e_rel=np.array(seed_n_e),
+            seed_level_frac_improved_e_rel=np.array(seed_frac_e),
+            seed_level_n_improved_correlation=np.array(seed_n_c),
+            seed_level_frac_improved_correlation=np.array(seed_frac_c),
+        )
+
+    return ExperimentIVResults(
+        seeds=list(config.seeds),
+        n_repeats_per_seed=reps,
+        geometries=geometries_out,
+        paired_comparisons=paired_out,
+    )
