@@ -396,6 +396,56 @@ def plot_fixed_truth_comparison(
     return fig
 
 
+def plot_fixed_truth_reconstruction_summary(
+    grid: Grid,
+    truth: np.ndarray,
+    post_mean: np.ndarray,
+    post_std: np.ndarray,
+    save_path: str | None = None,
+) -> plt.Figure:
+    """Experiment III, smooth-truth-only curated figure: truth / posterior
+    mean / posterior standard deviation (three panels).
+
+    Truth and posterior mean share one `viridis` scale (same physical
+    quantity); posterior std gets its own `magma` scale -- the same
+    convention as `plot_reconstruction_summary` (Experiment I) and
+    `plot_fixed_truth_comparison` (the six-panel smooth+sharp version this
+    supersedes for the curated figure set; that function is retained for
+    `ARCHITECTURE.md`/reference use, since the sharp-truth investigation it
+    depicts is still fully supported and tested, just no longer part of the
+    portfolio-facing narrative -- see `README.md`'s "Scope").
+    """
+    fig, axes = plt.subplots(1, 3, figsize=(14, 4.5), constrained_layout=True)
+    extent = [0.0, grid.W, 0.0, grid.W]
+
+    vmin = min(truth.min(), post_mean.min())
+    vmax = max(truth.max(), post_mean.max())
+    for ax, field, title in zip(axes[:2], (truth, post_mean), ("Truth", "Posterior mean")):
+        im = ax.imshow(
+            _as_image(field, grid), origin="lower", extent=extent,
+            cmap="viridis", vmin=vmin, vmax=vmax,
+        )
+        ax.set_title(title)
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        fig.colorbar(im, ax=ax, shrink=0.85, label="slowness")
+
+    im_std = axes[2].imshow(
+        _as_image(post_std, grid), origin="lower", extent=extent, cmap="magma"
+    )
+    axes[2].set_title("Posterior standard deviation")
+    axes[2].set_xlabel("x")
+    axes[2].set_ylabel("y")
+    fig.colorbar(im_std, ax=axes[2], shrink=0.85, label="posterior std")
+
+    fig.suptitle("Experiment III: fixed-truth reconstruction", fontsize=12)
+
+    if save_path is not None:
+        fig.savefig(save_path)
+
+    return fig
+
+
 def _grouped_log_bars(ax, components: dict, cases: list[str], quantities: list[str],
                        labels: list[str], colors, title: str) -> None:
     """Shared grouped-bar-with-value-labels helper for one panel of
@@ -457,6 +507,45 @@ def plot_q_decomposition(components: dict, save_path: str | None = None) -> plt.
         "Left panel's trace + bias terms sum to the right panel's theoretical E[Q]",
         fontsize=11,
     )
+
+    if save_path is not None:
+        fig.savefig(save_path)
+
+    return fig
+
+
+def plot_fixed_truth_q_decomposition_single(
+    components: dict, save_path: str | None = None
+) -> plt.Figure:
+    """Experiment III, smooth-truth-only curated figure: the `E[Q] =
+    tr(C_post^-1 V_post) + b^T C_post^-1 b` decomposition on a single
+    linear-scale panel (trace term, bias term, theoretical `E[Q]`, empirical
+    mean `Q`), with numeric value labels on every bar.
+
+    A linear scale is appropriate here -- unlike `plot_q_decomposition`,
+    which needs two log-scale panels to span the smooth and sharp cases'
+    several-orders-of-magnitude difference, this single smooth-truth case's
+    four quantities are all within about one order of magnitude of each
+    other. `components` is a dict with keys "trace", "bias", "theory",
+    "empirical" for the smooth truth alone (see
+    `diagnostics.fixed_truth_expected_Q`); `plot_q_decomposition` is
+    retained for the two-case (smooth+sharp) log-scale comparison used in
+    `ARCHITECTURE.md`/reference material.
+    """
+    keys = ["trace", "bias", "theory", "empirical"]
+    labels = [
+        "trace term\ntr(C_post^-1 V_post)", "bias term\nb^T C_post^-1 b",
+        "theoretical E[Q]", "empirical mean Q",
+    ]
+    values = [components[k] for k in keys]
+    colors = plt.get_cmap("viridis")(np.linspace(0.3, 0.7, len(values)))
+
+    fig, ax = plt.subplots(figsize=(7, 5), constrained_layout=True)
+    bars = ax.bar(labels, values, color=colors)
+    ax.bar_label(bars, labels=[f"{v:.3g}" for v in values], fontsize=9, padding=3)
+    ax.set_ylabel("value")
+    ax.set_title("Experiment III: decomposition of expected Q")
+    ax.set_ylim(top=ax.get_ylim()[1] * 1.15)  # headroom for the top value labels
 
     if save_path is not None:
         fig.savefig(save_path)

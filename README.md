@@ -14,13 +14,13 @@ mismatched truth, and a predetermined acquisition-geometry comparison) — is in
 
 **Headline result:** under the correctly specified generative model
 (Experiment II), the posterior is exactly calibrated — `Q ~ chi2(n_cells)`, confirmed
-empirically. Under a fixed physical truth (Experiment III), that guarantee no
-longer holds: a smooth truth well matched to the prior's assumed smoothness
-remains well calibrated (in fact conservatively over-covers), while a sharp,
-prior-mismatched truth produces severe undercoverage — despite an identically
-well-defined posterior in both cases. This distinction, between a posterior
-being mathematically well defined and a posterior being a trustworthy
-description of physical uncertainty, is the project's central finding.
+empirically. Under a fixed physical truth well matched to the prior's assumed
+smoothness (Experiment III), that same calibration guarantee is no longer
+automatic — it depends on how well the fixed truth matches what the prior
+expects — but is confirmed to hold here too (the posterior in fact
+conservatively over-covers). This distinction, between a posterior being
+mathematically well defined and a posterior being a trustworthy description
+of physical uncertainty, is the project's central finding.
 
 **Key results:**
 
@@ -28,10 +28,13 @@ description of physical uncertainty, is the project's central finding.
   optimization — via Cholesky factorizations and triangular solves throughout.
 - Under the correctly specified generative model, `Q ~ chi2(n_cells)` is
   confirmed empirically over 1000 independent realizations.
-- The fixed-truth smooth/sharp comparison shows how prior-truth compatibility
-  governs coverage, with an identically well-defined posterior in both cases.
-- The analytical `E[Q]` decomposition identifies deterministic bias — not
-  observation noise — as the mechanism behind the sharp truth's inflated `Q`.
+- Fixed-truth reconstruction and coverage remain well calibrated for a truth
+  well matched to the prior, despite the calibration guarantee no longer being
+  automatic once the truth is held fixed rather than drawn from the prior.
+- The analytical `E[Q]` decomposition (trace/noise term plus bias term) is
+  validated against the empirical mean `Q` for this fixed truth, confirming
+  the closed-form calibration diagnostics extend correctly beyond Experiment
+  II's purely-random-truth setting.
 - Experiment IV evaluates the effect of predetermined acquisition geometry on
   Bayesian reconstruction. Uniform, mildly boundary-clustered, and strongly
   boundary-clustered source/receiver layouts are compared at fixed grid
@@ -70,10 +73,13 @@ implementation.
 
 Complete. The project implements and validates Experiment I
 (construction/validation), Experiment II (correctly specified Bayesian
-calibration), Experiment III (fixed-truth coverage, both a smooth and a
-sharp truth), and Experiment IV (predetermined acquisition-geometry
-comparison), plus a follow-up diagnostic investigation into an observed
-coverage effect in Experiment III (see `ARCHITECTURE.md`). The package
+calibration), Experiment III (fixed-truth reconstruction and coverage
+validation), and Experiment IV (predetermined acquisition-geometry
+comparison). Experiment III's implementation also covers a deliberately
+prior-mismatched (sharp/checkerboard) truth and a follow-up diagnostic
+investigation into an observed coverage effect there (see `ARCHITECTURE.md`);
+this remains fully implemented, tested, and frozen, but is a supplementary
+investigation rather than part of this README's primary narrative. The package
 (`geometry.py`, `forward.py`, `prior.py`, `inversion.py`, `diagnostics.py`,
 `experiments.py`, `plots.py`, `config.py`) and its test suite are fully
 implemented.
@@ -105,9 +111,12 @@ Likewise, `experiment_III_baseline_smooth_n20_N1000_seed12345.npz` and
 `results/baselines/` (sharing config
 `experiment_III_baseline_config_n20_N1000_seed12345.yaml`, identical to
 `configs/calibration_fixed_truth.yaml`) are the validated, frozen reference
-results for Experiment III's smooth-vs-sharp fixed-truth comparison. They
-should not be overwritten by a run with a different seed, truth, or
-configuration without also updating this note.
+results for Experiment III's fixed-truth reconstruction and coverage
+validation: the smooth truth is this README's primary result; the
+sharp/checkerboard truth remains fully implemented, tested, and frozen as a
+supplementary investigation (see `ARCHITECTURE.md`). Neither should be
+overwritten by a run with a different seed, truth, or configuration without
+also updating this note.
 
 Likewise, `experiment_IV_baseline_n20_Ns16Nr16_10seeds_200reps.npz` under
 `results/baselines/` (config
@@ -142,8 +151,14 @@ exactly three predetermined geometries (uniform and two boundary-clustered
 layouts) — it is not a systematic acquisition-geometry sweep, and no
 optimizer, additional gamma values, or asymmetric layouts are part of it. A
 controlled prior-misspecification experiment and a controlled
-noise-misspecification experiment are likewise not part of this project. For
-more details about the experiments please refer to `experiment.pdf`.
+noise-misspecification experiment are likewise not part of this project: the
+fixed-truth comparison in Experiment III already demonstrates the central
+phenomenon those experiments would also illustrate — a well-defined posterior
+failing to describe physical uncertainty under model mismatch — via a
+mismatched truth rather than a mismatched prior or noise model. See
+`experiment.pdf`'s "Scope and interpretation" section for the complete list
+of excluded physical effects (curved rays, attenuation, wave-equation
+simulation, and others).
 
 ## Figures
 
@@ -173,31 +188,26 @@ Primary sequence — geometry → forward operator → Experiment I → Experime
    pattern.
 4. `figure_4_experiment_II_calibration.png` — global `Q` vs. `chi2(n_cells)`,
    and credible-region coverage vs. nominal.
-5. `figure_5_experiment_III_fixed_truth.png` — smooth vs. sharp truth,
-   posterior mean, and posterior standard deviation (six panels). The two
-   posterior-std panels are confirmed numerically identical (bit-identical
-   `posterior_stds` in the frozen baselines): `C_post` depends only on the
-   acquisition geometry, prior, and noise level, never on `s_true`, so the
-   posterior's claimed uncertainty is blind to whether the fixed truth
-   actually matches the prior.
+5. `figure_5_experiment_III_fixed_truth.png` — the fixed smooth truth,
+   posterior mean, and posterior standard deviation (three panels), for the
+   truth well matched to the prior's assumed smoothness.
 6. `figure_6_fixed_truth_Q_decomposition.png` — the `E[Q] = tr(C_post^-1
-   V_post) + b^T C_post^-1 b` decomposition (components panel) and its
-   theoretical-vs-empirical total (right panel), smooth vs. sharp, with
-   numeric value labels on every bar (the smooth bias term, ~0.28, would
-   otherwise be invisible on a log axis spanning ~10^0 to ~10^7).
+   V_post) + b^T C_post^-1 b` decomposition for this fixed smooth truth, on
+   a single linear-scale panel: the trace/noise term, the bias term, and
+   their sum (theoretical `E[Q]`) alongside the empirical mean `Q`, with
+   numeric value labels on every bar. The near-exact match between the
+   theoretical and empirical totals is the calibration confirmation itself.
 
-**Supplementary diagnostic figure** (not part of the primary result
-sequence):
-
-7. `figure_7_boundary_interior_coverage.png` — a follow-up spatial check for
-   the sharp truth. Ray density, posterior variance, and bias/noise ratios
-   normalized by posterior uncertainty were all checked at `block_size=4`,
-   and none explains the boundary/interior coverage gap shown here; the
-   effect may arise from higher-order spatial structure not captured by
-   these diagnostics (see `ARCHITECTURE.md`).
+Figure numbering intentionally skips 7: `figure_7_boundary_interior_coverage.png`
+was a follow-up spatial check specific to a deliberately prior-mismatched
+(sharp/checkerboard) truth, which is a supplementary investigation (see
+`ARCHITECTURE.md`) rather than part of this README's primary narrative, and
+is no longer part of the curated figure set. The underlying investigation,
+code, and frozen data are unchanged; `scripts/make_figures.py` can still
+regenerate that figure directly.
 
 **Experiment IV** (predetermined acquisition-geometry comparison; a separate
-experiment from 1-7 above, at a different acquisition than Experiment III's
+experiment from 1-6 above, at a different acquisition than Experiment III's
 frozen baselines — see "Status"):
 
 8. `figure_8_experiment_IV_geometry_comparison.png` — pooled `E_rel`
