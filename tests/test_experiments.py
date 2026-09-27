@@ -16,7 +16,7 @@ from tomography.experiments import (
     run_construction_validation,
     run_fixed_truth,
 )
-from tomography.forward import forward, synthetic_truth_checkerboard, synthetic_truth_gaussian_anomaly
+from tomography.forward import forward, synthetic_truth_bimodal, synthetic_truth_checkerboard
 from tomography.geometry import make_grid
 from tomography.inversion import posterior_isotropic
 
@@ -82,12 +82,12 @@ def _smooth_truth(config: ExperimentConfig) -> np.ndarray:
     # not a separately chosen literal, so the smooth fixed truth here really
     # is "the Experiment I truth", not a coincidentally similar new field.
     grid = make_grid(config.grid.W, config.grid.n)
-    return synthetic_truth_gaussian_anomaly(
+    return synthetic_truth_bimodal(
         grid,
         s_bg=config.prior.s_bg,
         delta_s=np.sqrt(config.prior.tau2),
-        x0=config.grid.W / 2,
-        y0=config.grid.W / 2,
+        centers=[(0.25 * config.grid.W, 0.475 * config.grid.W),
+                 (0.75 * config.grid.W, 0.475 * config.grid.W)],
         r=config.grid.W / 6,
     )
 
@@ -189,10 +189,10 @@ def test_fixed_truth_expected_Q_matches_frozen_baseline_within_monte_carlo_toler
     frozen Experiment III baselines' documented numbers (see
     `ARCHITECTURE.md`'s "Experiment III: investigating the boundary/interior
     coverage reversal" section): trace term ~32.928 (shared by both truths),
-    bias term ~0.282 (smooth) / ~21,954,034.70 (sharp), matching the frozen
-    `.npz` baselines' empirical mean Q to well within Monte Carlo tolerance
-    for N=1000 realizations. This does not regenerate or alter the frozen
-    baselines -- it only reads their config and `.npz` outputs.
+    bias term ~0.437 (smooth bimodal truth) / ~21,954,034.70 (sharp), matching
+    the frozen `.npz` baselines' empirical mean Q to well within Monte Carlo
+    tolerance for N=1000 realizations. This does not regenerate or alter the
+    frozen baselines -- it only reads their config and `.npz` outputs.
     """
     config = load_config("configs/calibration_fixed_truth.yaml")
     n_cells = config.grid.n**2
@@ -204,9 +204,11 @@ def test_fixed_truth_expected_Q_matches_frozen_baseline_within_monte_carlo_toler
     )
 
     grid = make_grid(config.grid.W, config.grid.n)
-    smooth_truth = synthetic_truth_gaussian_anomaly(
+    smooth_truth = synthetic_truth_bimodal(
         grid, s_bg=config.prior.s_bg, delta_s=np.sqrt(config.prior.tau2),
-        x0=config.grid.W / 2, y0=config.grid.W / 2, r=config.grid.W / 6,
+        centers=[(0.25 * config.grid.W, 0.475 * config.grid.W),
+                 (0.75 * config.grid.W, 0.475 * config.grid.W)],
+        r=config.grid.W / 6,
     )
     sharp_truth = synthetic_truth_checkerboard(
         grid, s_bg=config.prior.s_bg, delta_s=np.sqrt(config.prior.tau2),
@@ -219,10 +221,11 @@ def test_fixed_truth_expected_Q_matches_frozen_baseline_within_monte_carlo_toler
     assert np.array_equal(sharp_npz["truths"][0], sharp_truth)
 
     # Full-precision anchors from the original derivation of these numbers
-    # (ARCHITECTURE.md's table rounds trace to 32.928 and the smooth bias to
-    # 0.282, matching these to 3 significant figures).
+    # (ARCHITECTURE.md's table rounds trace to 32.928 and the smooth
+    # (bimodal-truth) bias to 0.437, matching these to 3 significant
+    # figures).
     for name, s_true, npz, expected_trace, expected_bias in [
-        ("smooth", smooth_truth, smooth_npz, 32.927974, 0.281715),
+        ("smooth", smooth_truth, smooth_npz, 32.927974, 0.436949),
         ("sharp", sharp_truth, sharp_npz, 32.927974, 21954034.698336),
     ]:
         result = fixed_truth_expected_Q(

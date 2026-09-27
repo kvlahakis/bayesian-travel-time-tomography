@@ -17,7 +17,7 @@ from tomography.experiments import (
     run_correctly_specified,
     run_fixed_truth,
 )
-from tomography.forward import synthetic_truth_checkerboard, synthetic_truth_gaussian_anomaly
+from tomography.forward import synthetic_truth_bimodal, synthetic_truth_checkerboard
 from tomography.geometry import make_grid
 from tomography.plots import plot_field_triplet
 
@@ -28,12 +28,12 @@ def _smooth_fixed_truth(config: ExperimentConfig) -> np.ndarray:
     # not a separately chosen literal, so the smooth fixed truth here really
     # is "the Experiment I truth", not a coincidentally similar new field.
     grid = make_grid(config.grid.W, config.grid.n)
-    return synthetic_truth_gaussian_anomaly(
+    return synthetic_truth_bimodal(
         grid,
         s_bg=config.prior.s_bg,
         delta_s=np.sqrt(config.prior.tau2),
-        x0=config.grid.W / 2,
-        y0=config.grid.W / 2,
+        centers=[(0.25 * config.grid.W, 0.475 * config.grid.W),
+                 (0.75 * config.grid.W, 0.475 * config.grid.W)],
         r=config.grid.W / 6,
     )
 

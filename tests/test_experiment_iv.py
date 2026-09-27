@@ -178,7 +178,7 @@ def test_paired_noise_identical_epsilon_across_geometries_but_seed_dependent():
     # applied to both) -- so re-deriving the reconstructions directly with a
     # manually shared epsilon must match run_acquisition_geometry_comparison
     # exactly.
-    from tomography.forward import forward, synthetic_truth_gaussian_anomaly
+    from tomography.forward import forward, synthetic_truth_bimodal
     from tomography.inversion import posterior_isotropic
     from tomography.diagnostics import relative_error
 
@@ -186,9 +186,11 @@ def test_paired_noise_identical_epsilon_across_geometries_but_seed_dependent():
     Cs = squared_exponential_cov(grid.cell_centers, tau2=config.tau2, ell=config.ell,
                                   jitter_relative=config.jitter_relative)
     s0 = config.s_bg * np.ones(grid.n**2)
-    s_true = synthetic_truth_gaussian_anomaly(
+    s_true = synthetic_truth_bimodal(
         grid, s_bg=config.s_bg, delta_s=np.sqrt(config.tau2),
-        x0=config.grid.W / 2, y0=config.grid.W / 2, r=config.grid.W / 6,
+        centers=[(0.25 * config.grid.W, 0.475 * config.grid.W),
+                 (0.75 * config.grid.W, 0.475 * config.grid.W)],
+        r=config.grid.W / 6,
     )
     rng = np.random.default_rng(7)
     epsilon0 = config.sigma * rng.standard_normal(config.Ns * config.Nr)
@@ -213,13 +215,15 @@ def test_fixed_truth_is_identical_across_geometries():
     # s_true is built once in run_acquisition_geometry_comparison and reused
     # for every geometry -- confirmed indirectly via the manual re-derivation
     # above matching exactly for every geometry using the *same* s_true.
-    from tomography.forward import synthetic_truth_gaussian_anomaly
+    from tomography.forward import synthetic_truth_bimodal
 
     config = _small_config()
     grid = make_grid(config.grid.W, config.grid.n)
-    expected_s_true = synthetic_truth_gaussian_anomaly(
+    expected_s_true = synthetic_truth_bimodal(
         grid, s_bg=config.s_bg, delta_s=np.sqrt(config.tau2),
-        x0=config.grid.W / 2, y0=config.grid.W / 2, r=config.grid.W / 6,
+        centers=[(0.25 * config.grid.W, 0.475 * config.grid.W),
+                 (0.75 * config.grid.W, 0.475 * config.grid.W)],
+        r=config.grid.W / 6,
     )
     result = run_acquisition_geometry_comparison(config)
     # If a different truth were used per geometry, the posterior_std field
@@ -359,7 +363,7 @@ def test_regression_permanent_protocol_reproduces_validated_robustness_direction
     """The permanent 10-seed x 200-repeat protocol must reproduce the
     validated robustness result within Monte Carlo tolerance: both
     boundary-clustered geometries improve (reduce) mean `E_rel` relative to
-    uniform, mild in 9/10 seeds and strong in 10/10 seeds (see
+    uniform, in 10/10 seeds each, against the bimodal fixed truth (see
     `ARCHITECTURE.md`). This is a fixed-truth Monte Carlo estimate, not exact
     linear algebra, so this checks the established direction/count, not
     bit-exact numbers.
@@ -372,5 +376,5 @@ def test_regression_permanent_protocol_reproduces_validated_robustness_direction
 
     assert mild.delta_e_rel.mean() < 0
     assert strong.delta_e_rel.mean() < 0
-    assert int(np.sum(mild.seed_level_mean_delta_e_rel < 0)) == 9
+    assert int(np.sum(mild.seed_level_mean_delta_e_rel < 0)) == 10
     assert int(np.sum(strong.seed_level_mean_delta_e_rel < 0)) == 10

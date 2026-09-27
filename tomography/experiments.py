@@ -57,7 +57,7 @@ from .diagnostics import (
     relative_error,
     standardized_errors,
 )
-from .forward import add_noise, forward, synthetic_truth_gaussian_anomaly
+from .forward import add_noise, forward, synthetic_truth_bimodal
 from .geometry import (
     Grid,
     build_sensitivity_matrix,
@@ -88,24 +88,24 @@ class ConstructionValidationResult:
 
 def run_construction_validation(
     config: ExperimentConfig,
-    x0: float | None = None,
-    y0: float | None = None,
+    centers: list[tuple[float, float]] | None = None,
     delta_s: float | None = None,
     r: float | None = None,
 ) -> ConstructionValidationResult:
     """Experiment I: construct and validate the full tomography pipeline.
 
     Builds the grid and acquisition geometry, validates `A`'s row sums
-    against known ray lengths, generates a smooth Gaussian-anomaly truth
-    (PDF Section 7, Step 4), simulates noisy data, and computes the
-    posterior. This run is not a misspecification experiment: it uses
+    against known ray lengths, generates the smooth bimodal truth (see
+    `forward.synthetic_truth_bimodal`), simulates noisy data, and computes
+    the posterior. This run is not a misspecification experiment: it uses
     `config.noise.sigma_true` / `config.prior.ell_true` to generate the data
     and `config.noise.sigma_infer` / `config.prior.ell_infer` for inference,
     which `configs/baseline.yaml` sets equal to each other by design.
 
-    `x0`, `y0`, `delta_s`, `r` configure the Gaussian anomaly and default to
-    the domain center, one prior marginal std, and one sixth of the domain
-    width, respectively, if not given.
+    `centers`, `delta_s`, `r` configure the bimodal truth and default to the
+    frozen parameterization (`[(0.25*W, 0.475*W), (0.75*W, 0.475*W)]`, one
+    prior marginal std, and one sixth of the domain width, respectively) if
+    not given -- see `CLAUDE.md`'s `forward.py` module contract.
     """
     grid = make_grid(config.grid.W, config.grid.n)
     sources, receivers = make_sources_receivers(
@@ -118,17 +118,16 @@ def run_construction_validation(
     )
     check_row_sums(A, ray_lengths)
 
-    if x0 is None:
-        x0 = config.grid.W / 2.0
-    if y0 is None:
-        y0 = config.grid.W / 2.0
+    if centers is None:
+        centers = [(0.25 * config.grid.W, 0.475 * config.grid.W),
+                   (0.75 * config.grid.W, 0.475 * config.grid.W)]
     if delta_s is None:
         delta_s = np.sqrt(config.prior.tau2)
     if r is None:
         r = config.grid.W / 6.0
 
-    s_true = synthetic_truth_gaussian_anomaly(
-        grid, s_bg=config.prior.s_bg, delta_s=delta_s, x0=x0, y0=y0, r=r
+    s_true = synthetic_truth_bimodal(
+        grid, s_bg=config.prior.s_bg, delta_s=delta_s, centers=centers, r=r
     )
 
     t_true = forward(A, s_true)
@@ -411,7 +410,7 @@ def run_fixed_truth(
     """Experiment III: a fixed, deterministic truth with repeated noise draws.
 
     `s_true` is supplied by the caller as a deterministic field -- e.g.
-    `forward.synthetic_truth_gaussian_anomaly` for the smooth truth, or
+    `forward.synthetic_truth_bimodal` for the smooth truth, or
     `forward.synthetic_truth_checkerboard` for the sharp one (PDF Section 9)
     -- and is *not* regarded as a draw from `Cs_infer`. Only the observation
     noise varies across realizations: `d^(k) = A s_true + eps^(k)`,
@@ -525,9 +524,11 @@ def run_acquisition_geometry_comparison(config: ExperimentIVConfig) -> Experimen
         grid.cell_centers, tau2=config.tau2, ell=config.ell, jitter_relative=config.jitter_relative
     )
     s0 = config.s_bg * np.ones(p)
-    s_true = synthetic_truth_gaussian_anomaly(
+    s_true = synthetic_truth_bimodal(
         grid, s_bg=config.s_bg, delta_s=np.sqrt(config.tau2),
-        x0=config.grid.W / 2, y0=config.grid.W / 2, r=config.grid.W / 6,
+        centers=[(0.25 * config.grid.W, 0.475 * config.grid.W),
+                 (0.75 * config.grid.W, 0.475 * config.grid.W)],
+        r=config.grid.W / 6,
     )
 
     m_expected = config.Ns * config.Nr

@@ -31,12 +31,43 @@ def synthetic_truth_gaussian_anomaly(
 
     s_true(x, y) = s_bg + delta_s * exp(-((x - x0)^2 + (y - y0)^2) / (2 r^2))
 
-    Used as the Experiment I / II construction truth, and as the "smooth"
-    fixed truth in Experiment III.
+    A single-bump building block. It is no longer used directly as any
+    experiment's frozen truth (see `synthetic_truth_bimodal`, which is built
+    from two calls to this function), but remains implemented and tested in
+    its own right.
     """
     x = grid.cell_centers[:, 0]
     y = grid.cell_centers[:, 1]
     return s_bg + delta_s * np.exp(-((x - x0) ** 2 + (y - y0) ** 2) / (2 * r**2))
+
+
+def synthetic_truth_bimodal(
+    grid: Grid, s_bg: float, delta_s: float, centers: list[tuple[float, float]], r: float
+) -> np.ndarray:
+    """Smooth bimodal truth: homogeneous background plus two localized
+    Gaussian bumps of identical amplitude `delta_s` and width `r`, summed.
+
+    s_true(x, y) = s_bg + sum_k delta_s * exp(-((x-x_k)^2+(y-y_k)^2)/(2 r^2))
+
+    Built from two calls to `synthetic_truth_gaussian_anomaly` with `s_bg=0`
+    (extracting just each bump term), summing the bump terms, and adding
+    `s_bg` once here -- not from two independently-backgrounded fields,
+    which would double-count the background.
+
+    This is the Experiment I truth, reused as Experiment III's well-matched
+    fixed truth and as Experiment IV's fixed reconstruction target. See
+    `CLAUDE.md`'s `forward.py` module contract for the frozen
+    parameterization (`centers = [(0.25*W, 0.475*W), (0.75*W, 0.475*W)]`,
+    `delta_s = sqrt(tau2)`, `r = W/6`) and why the centers' `y = 0.475*W`
+    (not the domain's exact center `0.5*W`) is deliberate: at `n=20`,
+    `y=0.5*W` falls exactly on a cell boundary, splitting each intended peak
+    into a tied pair of grid cells rather than one clean maximum.
+    """
+    bumps = sum(
+        synthetic_truth_gaussian_anomaly(grid, s_bg=0.0, delta_s=delta_s, x0=x0, y0=y0, r=r)
+        for x0, y0 in centers
+    )
+    return s_bg + bumps
 
 
 def synthetic_truth_checkerboard(

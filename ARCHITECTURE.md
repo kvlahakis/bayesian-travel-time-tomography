@@ -140,7 +140,7 @@ $$
 which is the *theoretically expected* `std(z_j)` under repeated noise for a
 fixed truth — not 1. Concretely:
 
-- for a well-matched fixed truth (the smooth Gaussian-anomaly truth), `r_j`
+- for a well-matched fixed truth (the smooth bimodal truth), `r_j`
   is well below 1 (empirically `r_j` averages ≈0.27 across cells for the
   frozen Experiment III smooth baseline, matching the empirical `std(z_j)`
   per cell to within ≈0.01), producing a *systematically narrow* `z`
@@ -177,7 +177,7 @@ just realizations) is not directly comparable to `r_j`: by the law of total
 variance, `Var(pooled z) = mean_j(Var(z_j)) + Var_j(mean(z_j))`, and the
 per-cell theoretical `r_j` only predicts the first (within-cell) term — the
 second term (the spread, across cells, of the *bias* `(I-KA)(s_true-s0)`,
-which varies spatially for a non-uniform truth like the Gaussian anomaly)
+which varies spatially for a non-uniform truth like the bimodal truth)
 adds further pooled variance on top.
 
 **Coverage and the fixed-truth behavior of `Q` are the appropriate Experiment
@@ -217,12 +217,12 @@ the frozen `.npz` baselines:
 
 | case | trace term `tr(C_post^-1 V_post)` | bias term `b^T C_post^-1 b` | theoretical `E[Q]` | empirical mean `Q` | relative discrepancy |
 |---|---|---|---|---|---|
-| smooth | 32.928 | 0.282 | 33.210 | 33.173 | 0.112% |
+| smooth | 32.928 | 0.437 | 33.365 | 33.347 | 0.0549% |
 | sharp | 32.928 | 21,954,034.70 | 21,954,067.63 | 21,954,065.25 | 0.00001% |
 
 Both cases agree with the empirical mean to well within Monte Carlo sampling
 noise for `N=1000` realizations. This confirms — quantitatively, not just
-qualitatively — that the ~660,000x gap between the smooth and sharp mean
+qualitatively — that the ~658,000x gap between the smooth and sharp mean
 `Q` is explained by the bias term alone: the trace/noise term is *identical*
 between the two cases (it depends only on `A`, `C_post`, and `Sigma_d`, none
 of which involve `s_true`), so every order of magnitude of the gap comes
@@ -299,7 +299,8 @@ point for this project, not an unfinished result.
 
 Holding the grid (`n=20`), ray count (`Ns=Nr=16`, `m=256`), prior
 (`tau2=0.04`, `ell=2.0`), noise level (`sigma=0.02`), and Experiment III's
-smooth fixed truth all constant, Experiment IV compares exactly three
+smooth bimodal fixed truth (`forward.synthetic_truth_bimodal`) all constant,
+Experiment IV compares exactly three
 predetermined source/receiver layouts built by
 `geometry.make_boundary_clustered_sources_receivers`: uniform (`gamma=1.0`,
 recovering `make_sources_receivers` exactly), mild boundary clustering
@@ -329,12 +330,13 @@ variance. Reconstruction quality is measured with `diagnostics.relative_error`
 called directly -- never a hand-derived formula, and in particular never an
 `||s_true - s0||`-normalized variant, which is not this codebase's
 `relative_error` convention. Pooled over all 2000 realizations, mean `E_rel`
-is `0.0291` (uniform), `0.0279` (mild), `0.0270` (strong); mean correlation
-improves in the same direction. Paired mean `Delta_E_rel` (geometry minus
-uniform) is negative for both boundary geometries (`-0.00121` mild,
-`-0.00209` strong), and this direction is robust at the seed level: 9 of 10
-master seeds for mild boundary clustering, and 10 of 10 for strong boundary
-clustering, have a negative seed-level mean `Delta_E_rel`.
+is `0.0254` (uniform), `0.0241` (mild), `0.0235` (strong); mean correlation
+improves in the same direction (`0.898` uniform, `0.908` mild, `0.911`
+strong). Paired mean `Delta_E_rel` (geometry minus uniform) is negative for
+both boundary geometries (`-0.00137` mild, `-0.00191` strong), and this
+direction is robust at the seed level: all 10 of 10 master seeds for both
+mild and strong boundary clustering have a negative seed-level mean
+`Delta_E_rel`.
 
 **Limitation.** Only these three predetermined layouts were tested. This
 establishes that boundary clustering, at these two specific `gamma` values

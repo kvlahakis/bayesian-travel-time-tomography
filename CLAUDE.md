@@ -100,8 +100,22 @@ marked above as not yet created; once it exists, drop that annotation.
 - `forward(A, s)` → `t`.
 - `add_noise(t, sigma, rng)` → `d`.
 - `synthetic_truth_gaussian_anomaly(grid, s_bg, delta_s, x0, y0, r)` → `s_true`
-  (background plus localized Gaussian bump; the Experiment I truth, reused as
-  Experiment III's well-matched fixed truth).
+  (background plus one localized Gaussian bump). A single-bump building block; it
+  is no longer used directly as any experiment's frozen truth (see
+  `synthetic_truth_bimodal` below), but remains implemented and tested.
+- `synthetic_truth_bimodal(grid, s_bg, delta_s, centers, r)` → `s_true` (background
+  plus two localized Gaussian bumps of identical amplitude `delta_s` and width `r`,
+  summed — built from two calls to `synthetic_truth_gaussian_anomaly`). This is the
+  Experiment I truth, reused as Experiment III's well-matched fixed truth and as
+  Experiment IV's fixed reconstruction target. Frozen parameterization: `centers =
+  [(0.25*W, 0.475*W), (0.75*W, 0.475*W)]`, `delta_s = sqrt(tau2)`, `r = W/6`,
+  `s_bg = 1.0`. The `y = 0.475*W` centers (not the domain's exact vertical center
+  `0.5*W`) are deliberate: at `n=20`, `y=0.5*W` falls exactly on a cell boundary,
+  which splits each intended peak into a tied pair of grid cells rather than one
+  clean maximum; `0.475*W` avoids this grid-alignment artifact while staying in the
+  central row of cells. Verified, not assumed, to be genuinely bimodal: exactly two
+  distinct local maxima, with the domain-center value meaningfully below the peak
+  value (dip ratio ≈0.65 — a real valley, not a plateau).
 - `synthetic_truth_checkerboard(grid, s_bg, delta_s, block_size)` → `s_true` with
   sharp/discontinuous structure. Used as Experiment III's mismatched fixed truth,
   to test how the posterior behaves when the fixed truth is poorly represented by
